@@ -7,11 +7,7 @@ void cmd(std::filesystem::path& dir) {
 
 	std::cout << "Welcome to file sharing app!" << std::endl;
 
-	try {
-		server.join();
-	} catch (std::system_error& err) {
-		std::cout << "Error: " << err.what() << "Try again! [-]" << std::endl;
-	}
+	server.join();
 
 	while (true) {
 		std::cout << "Write the command (write \"help\" for help): ";
@@ -28,20 +24,13 @@ void cmd(std::filesystem::path& dir) {
 				cmd_help();
 				continue;
 			case commands::list::list:
-				update_dir(dir);
 				cmd_list(dir);
 				continue;
 			case commands::list::get:
-				update_dir(dir);
-
-				try {
-					cmd_get(dir, command);
-				} catch (std::exception e) {
-					std::cout << "The file does not exist! Try again!" << std::endl;
-				}
+				cmd_get(dir, command);
 				continue;
 			default:
-				std::cout << "This number does not exist! Try again!" << std::endl;
+				std::cout << "This command does not exist! Try again! [-]" << std::endl;
 				continue;
 		}
 		break;
@@ -50,6 +39,8 @@ void cmd(std::filesystem::path& dir) {
 
 int8_t processing_command(const std::string& command) {
 	uint8_t size = 0;
+
+	if (command.empty()) { return -1; }
 
 	for (auto& pair : commands::commands_map) {
 		for (auto& sym : pair.first) {

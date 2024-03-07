@@ -1,21 +1,25 @@
 #include "connection.hpp"
 
-void connect_server(struct data::server& connection_server,
-                    struct data::client& connection_client) {
-	struct sockaddr_in* sockaddr_server = nullptr;
-	struct sockaddr* sockaddr_client = nullptr;
-	int64_t sockfd_server;
-	int64_t sockfd_client;
-	uint64_t port_server;
+int8_t connect_server(struct data::server& connection_server,
+                      struct data::client& connection_client) {
+	struct sockaddr_in* addr = nullptr;
+	int64_t sfd_server;
+	int64_t sfd_client;
+	uint16_t port_server;
 	std::string ip_server;
+	std::string exit = "exit";
 
 	while (true) {
-		std::cout << "Enter the IPv4-address of the server: ";
+		std::cout << "Enter the IPv4-address of the server (for exit - \"exit\"): ";
 		std::cin >> ip_server;
 		std::cout << std::endl;
 
+		if (ip_server.compare(exit)) {
+			return -1;
+		}
+
 		if (ip_server.size() > INET_ADDRSTRLEN) {
-			std::cout << "Incorrect IPv4-address of the server! [-]" << std::endl;
+			std::cout << "Incorrect IPv4-address of the server! Try again! [-]" << std::endl;
 			continue;
 		}
 
@@ -23,32 +27,47 @@ void connect_server(struct data::server& connection_server,
 		std::cin >> port_server;
 		std::cout << std::endl;
 
-		if ((sockfd_server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == -1) {
-			throw std::system_error();
+		if ((sfd_server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) <= 0) {
+			std::cout << "Can not create socket! Try again! [-]" << std::endl;
+			continue;
 		} else {
 			break;
 		}
 	}
 
-	sockaddr_server->sin_family = AF_INET;
-	sockaddr_server->sin_port = htons(port_server);
-	inet_pton(AF_INET, ip_server.c_str(), &sockaddr_server->sin_addr);
+	addr->sin_family = AF_INET;
+	addr->sin_port = htons(port_server);
 
-	connection_server.sockfd = sockfd_server;
-	connection_server.addr = *sockaddr_server;
-
-	if ((sockfd_client = connect(sockfd_server, sockaddr_client, sizeof(sockaddr_client))) == -1) {
+	if (inet_pton(AF_INET, ip_server.c_str(), &addr->sin_addr) <= 0) {
 		throw std::system_error();
 	}
 
-	connection_client.sockfd = sockfd_client;
-	connection_client.addr = *sockaddr_client;
+	if ((sfd_client = connect(sfd_server,
+	                          reinterpret_cast<const sockaddr*>(&addr->sin_addr),
+	                          sizeof(*addr))) <= 0) {
+		throw std::system_error();
+	}
+
+	connection_server.sockfd = sfd_server;
+	connection_client.sockfd = sfd_client;
+
+	return 0;
 }
 
-void connect_close(struct data::server&, struct data::client&) {
+int8_t connect_close(struct data::server& connection_server, struct data::client& connection_client) {
+	if (close(connection_server.sockfd) <= 0) {
+		throw std::system_error();
+	}
 
+	if (close(connection_client.sockfd) <= 0) {
+		throw std::system_error();
+	}
+
+	return 0;
 }
 
 void listen_server() {
+	while (true) {
 
+	}
 }

@@ -6,7 +6,7 @@ void cmd_list(std::filesystem::path& dir) {
 	}
 }
 
-void cmd_get(std::filesystem::path& dir, std::string& command) {
+void cmd_get(std::filesystem::path& file, std::string& command) {
 
 }
 

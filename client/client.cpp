@@ -7,15 +7,21 @@ int32_t main() {
 	struct data::client connection_client { };
 	struct data::server connection_server { };
 
-	try {
-		path = init(connection_server, connection_client);
+	path = init(connection_server, connection_client);
 
+	if (path.empty()) {
+		std::cout << "Error! Path to the dir is empty! [-]" << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	try {
 		cmd(path);
-		finalize(connection_server, connection_client);
 	} catch (std::exception& err) {
 		std::cout << "Error!" << err.what() << std::endl;
 		return EXIT_FAILURE;
 	}
+
+	finalize(connection_server, connection_client);
 
 	return EXIT_SUCCESS;
 }
@@ -37,10 +43,12 @@ std::filesystem::path init(
 		}
 	}
 
-	while (connection_server.sockfd != -1 &&
-			connection_client.sockfd != -1) {
+	while (connection_server.sockfd > 0 &&
+			connection_client.sockfd > 0) {
 		try {
-			connect_server(connection_server, connection_client);
+			if (connect_server(connection_server, connection_client) != 0) {
+				return path;
+			}
 		} catch (std::system_error& err) {
 			std::cout << "Error! " << "Try again! [-]" << std::endl;
 			path.clear();
@@ -58,8 +66,7 @@ void finalize(struct data::server& connection_server,
 	try {
 		connect_close(connection_server, connection_client);
 	} catch (std::system_error& err) {
-		std::cout << "Error! " << err.what() << std::endl
-				<< "Try again! [-]" << std::endl;
+		std::cout << "Error! " << "Try again! [-]" << std::endl;
 		return;
 	}
 
