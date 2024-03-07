@@ -3,5 +3,5 @@ project(P2P_network)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_executable(P2P_network_client client/client.cpp)
-add_executable(P2P_network_server server/server.cpp)
+add_subdirectory(server)
+add_subdirectory(client)
