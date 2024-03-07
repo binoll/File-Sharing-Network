@@ -1,15 +1,15 @@
 #include "cmd.hpp"
-#include "../connection/connection.hpp"
 
-void cmd() {
-	uint8_t ch;
+void cmd(std::filesystem::path& dir) {
 	std::string command;
+	uint8_t ch;
 
 	std::cout << "Welcome to file sharing app!" << std::endl;
 
 	while (true) {
 		std::cout << "Write the command (write \"help\" for help): ";
 		std::cin >> command;
+		std::cout << std::endl;
 
 		ch = processing_command(command);
 
@@ -21,13 +21,20 @@ void cmd() {
 				cmd_help();
 				continue;
 			case commands::list::list:
-				cmd_list();
+				update_dir(dir);
+				cmd_list(dir);
 				continue;
 			case commands::list::get:
-				cmd_get();
+				update_dir(dir);
+
+				try {
+					cmd_get(dir, command);
+				} catch (std::exception e) {
+					std::cout << "The file does not exist! Try again!" << std::endl;
+				}
 				continue;
 			default:
-				std::cout << "This item did not exist! Try again." << std::endl;
+				std::cout << "This number does not exist! Try again!" << std::endl;
 				continue;
 		}
 		break;
@@ -60,13 +67,9 @@ void cmd_exit() {
 }
 
 void cmd_help() {
-
-}
-
-void cmd_list() {
-
-}
-
-void cmd_get() {
-
+	std::cout << "Commands list: " << std::endl
+			<< "\t1. exit" << std::endl
+			<< "\t2. help" << std::endl
+			<< "\t3. list" << std::endl
+			<< "\t4. get [filename]" << std::endl;
 }

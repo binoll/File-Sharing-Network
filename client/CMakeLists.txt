@@ -6,6 +6,6 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(P2P_network_client
         client.cpp
         cmd/cmd.cpp
-        cmd/cmd.cpp
         connection/connection.cpp
+        files/files.cpp
 )

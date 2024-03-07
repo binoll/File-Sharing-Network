@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../libs.hpp"
+#include "../connection/connection.hpp"
 
 namespace commands {
 	enum list {
@@ -15,7 +16,7 @@ namespace commands {
 	};
 }
 
-void cmd();
+void cmd(std::filesystem::path&);
 
 int8_t processing_command(const std::string&);
 
@@ -23,6 +24,8 @@ void cmd_exit();
 
 void cmd_help();
 
-void cmd_list();
+extern void cmd_list(std::filesystem::path&);
 
-void cmd_get();
+extern void cmd_get(std::filesystem::path&, std::string&);
+
+extern bool update_dir(std::filesystem::path&);
