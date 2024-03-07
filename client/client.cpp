@@ -10,9 +10,8 @@ int32_t main() {
 	try {
 		path = init(connection_server, connection_client);
 
-		connect_server(connection_server, connection_client);
 		cmd(path);
-		connect_close(connection_server, connection_client);
+		finalize(connection_server, connection_client);
 	} catch (std::exception& err) {
 		std::cout << "Error!" << err.what() << std::endl;
 		return EXIT_FAILURE;
@@ -34,11 +33,37 @@ std::filesystem::path init(
 		try {
 			create_dir(path);
 		} catch (std::system_error&) {
-			std::cout << "Can not create dir! Please write another path!" << std::endl;
+			std::cout << "Can not create dir! Please write another path! [-]" << std::endl;
 		}
 	}
 
+	while (connection_server.sockfd != -1 &&
+			connection_client.sockfd != -1) {
+		try {
+			connect_server(connection_server, connection_client);
+		} catch (std::system_error& err) {
+			std::cout << "Error! " << "Try again! [-]" << std::endl;
+			path.clear();
+			return path;
+		}
+	}
+
+	std::cout << "The connection is established! [+]";
+
 	return path;
+}
+
+void finalize(struct data::server& connection_server,
+              struct data::client& connection_client) {
+	try {
+		connect_close(connection_server, connection_client);
+	} catch (std::system_error& err) {
+		std::cout << "Error! " << err.what() << std::endl
+				<< "Try again! [-]" << std::endl;
+		return;
+	}
+
+	std::cout << "The connection is closed! [+]";
 }
 
 void create_dir(std::string& path) {

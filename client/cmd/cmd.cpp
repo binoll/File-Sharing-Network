@@ -1,10 +1,17 @@
 #include "cmd.hpp"
 
 void cmd(std::filesystem::path& dir) {
+	std::thread server(listen_server);
 	std::string command;
 	uint8_t ch;
 
 	std::cout << "Welcome to file sharing app!" << std::endl;
+
+	try {
+		server.join();
+	} catch (std::system_error& err) {
+		std::cout << "Error: " << err.what() << "Try again! [-]" << std::endl;
+	}
 
 	while (true) {
 		std::cout << "Write the command (write \"help\" for help): ";
