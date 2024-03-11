@@ -75,20 +75,10 @@ void CommandLine::run() {
 				this->help();
 				continue;
 			case 2:
-				std::list<std::filesystem::path> list_files;
 
-				this->dir.list(list_files);
-				std::cout << "Available files:" << std::endl;
-
-				for (auto& item : list_files) {
-					std::cout << "\t" << item << std::endl;
-				}
-
-				std::cout << std::endl;
 				continue;
 			case 3:
 
-				dir.get_file();
 				continue;
 			default:
 				std::cout << "This command does not exist! Try again! [-]" << std::endl;
