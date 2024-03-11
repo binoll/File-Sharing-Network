@@ -14,4 +14,4 @@ and start downloading any of them through the server. If
 the same downloaded file is located on 2 or more clients,
 the download is carried out simultaneously from all clients, alternating blocks by
 1kb. Thus, each client gives the file to the network only partially.
-Commands in the user console: list, get file name, exit, help.
+Commands in the user console: list, get_file file name, exit, help.

@@ -1,23 +1,22 @@
 #pragma once
 
-#include "../../libs.hpp"
+#include "../client.hpp"
 
-// Data for the functioning of the client side
-namespace data {
-	struct client {
-		int64_t sockfd = -1;
-	};
+struct data {
+	int64_t fd;
+	sockaddr_in* addr;
+};
 
-	struct server {
-		int64_t sockfd = -1;
-	};
-}
+class Connection {
+ public:
+	Connection();
 
-// The function connects to the server and returns the fd of server
-int8_t connect_server(struct data::server&, struct data::client&);
+	~Connection();
 
-// The function closes the connection to the server
-int8_t connect_close(struct data::server&, struct data::client&);
+ private:
+	void listen_server();
 
-// The function
-void listen_server();
+	std::thread listen;
+	struct data client;
+	struct data server;
+};
