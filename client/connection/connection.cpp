@@ -44,16 +44,80 @@ int8_t Connection::create_connection(const std::string& ip, uint64_t port) {
 	return 0;
 }
 
-int8_t Connection::list(std::list<std::filesystem::path>& list) {
+int8_t Connection::update_dir(const std::string& path) {
+	return this->dir.set_work_path(path);
+}
 
+int8_t Connection::list(std::list<std::string>& list) {
+	std::lock_guard<std::mutex> lock(mutex);
+	std::byte buf[ONE_KB];
+	int64_t bytes;
+	std::string command = "list";
+
+	if (this->send_msg(command) == -1) {
+		return -1;
+	}
+
+	if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) <= 0) {
+		return -1;
+	}
+
+	std::string msg(reinterpret_cast<char*>(buf), bytes);
+
+	if (msg == START_MSG) {
+		while (true) {
+			if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) <= 0) {
+				return -1;
+			}
+
+			std::string msg(reinterpret_cast<char*>(buf), bytes);
+
+			if (msg == END_MSG) {
+				break;
+			}
+
+			list.emplace_back(msg);
+		}
+	} else {
+		return -1;
+	}
+	return 0;
 }
 
 int8_t Connection::get(const std::filesystem::path& path) {
+	std::lock_guard<std::mutex> lock(mutex);
+	std::byte buf[ONE_KB];
+	int64_t bytes;
+	std::string command = "get:" + path.filename().string();
 
-}
+	if (this->send_msg(command) == -1) {
+		return -1;
+	}
 
-int8_t Connection::update_dir(const std::string& path) {
-	return this->dir.set_work_path(path);
+	if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) <= 0) {
+		return -1;
+	}
+
+	std::string msg(reinterpret_cast<char*>(buf), bytes);
+
+	if (msg == START_MSG) {
+		while (true) {
+			if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) <= 0) {
+				return -1;
+			}
+
+			if (msg == END_MSG) {
+				break;
+			}
+
+			if (this->dir.set_file(path, buf, bytes) == -1) {
+				return -1;
+			}
+		}
+	} else {
+		return -1;
+	}
+	return 0;
 }
 
 void Connection::listen_server() {
@@ -80,54 +144,96 @@ int8_t Connection::send_list() {
 	return 0;
 }
 
-int8_t Connection::send_file(const std::string& path) {
-	std::byte buf[ONE_KB];
-	int64_t size;
-	int64_t off = 0;
+int8_t Connection::send_file(const std::string& path, int64_t offset, int64_t size) {
+	std::byte buf[size];
+	int64_t bytes;
 
 	while (true) {
-		if ((size = this->dir.get_file(path, buf, off, ONE_KB)) == -1) {
+		if ((bytes = this->dir.get_file(path, buf, offset, size)) == -1) {
 			return -1;
-		} else if (size == -2) {
+		} else if (bytes == -2) {
 			break;
 		}
 
 		if (send(this->server.fd, buf, size, 0) == -1) {
 			return -1;
 		}
-		off += ONE_KB;
+		offset += size;
 	}
 	return 0;
 }
 
-int8_t Connection::send_err(const std::string& err) {
-	uint64_t size = err.size();
+int8_t Connection::send_file(const std::string& path, int64_t size) {
 	std::byte buf[size];
+	int64_t offset = 0;
+	int64_t bytes;
 
-	if (send(this->server.fd, buf, size, 0) == -1) {
+	while (true) {
+		if ((bytes = this->dir.get_file(path, buf, offset, size)) == -1) {
+			return -1;
+		} else if (bytes == -2) {
+			break;
+		}
+
+		if (send(this->server.fd, buf, size, 0) == -1) {
+			return -1;
+		}
+		offset += size;
+	}
+	return 0;
+}
+
+int8_t Connection::send_msg(const std::string& msg) {
+	if (send(this->server.fd, msg.c_str(), msg.size(), 0) == -1) {
 		return -1;
 	}
 	return 0;
 }
 
-void Connection::send_response(std::byte* buf, uint64_t size) {
-	std::string request(reinterpret_cast<char*>(buf), size);
+void Connection::send_response(std::byte* buf, uint64_t bytes) {
+	std::string msg(reinterpret_cast<char*>(buf), bytes);
 
-	if (request == "list") {
-		if (this->send_list()) {
-			std::cerr << "Error: Can not send list of files." << std::endl;
+	if (msg == "list") {
+		if (this->send_list() == -1) {
+			return;
 		}
-	} else if (request.find("get ") == 0) {
-		std::string filename = request.substr(4);
+	} else if (msg.find("part:") == 0) {
+		std::regex regex("part:([0-9]+):([0-9]+):(.+)");
+		std::smatch match;
+		std::string filename;
+		int64_t offset = 0;
+		int64_t size = 0;
 
-		if (this->send_file(filename) == -1) {
-			std::cerr << "Error: Can not send file." << std::endl;
+		if (std::regex_match(msg, match, regex)) {
+			offset = std::stoll(match[1]);
+			size = std::stoll(match[2]);
+			filename = match[3];
+		}
+
+		if (this->send_file(filename, offset, size) == -1) {
+			return;
+		}
+	} else if (msg.find("get:") == 0) {
+		std::regex regex("get:([0-9]+):(.+)");
+		std::smatch match;
+		std::string filename;
+		int64_t size = 0;
+
+		if (std::regex_match(msg, match, regex)) {
+			size = std::stoll(match[1]);
+			filename = match[2];
+		}
+
+		if (send(this->server.fd, START_MSG.c_str(), START_MSG.size(), 0) == -1 ||
+				this->send_file(filename, size) == -1 ||
+				send(this->server.fd, END_MSG.c_str(), END_MSG.size(), 0) == -1) {
+			return;
 		}
 	} else {
-		std::string err = "Error: Unrecognized request.";
+		std::string err = "err";
 
-		if (this->send_err(err) == -1) {
-			std::cerr << "Error: Can send error." << std::endl;
+		if (this->send_msg(err) == -1) {
+			return;
 		}
 	}
 }

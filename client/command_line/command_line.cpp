@@ -23,7 +23,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 void CommandLine::run() {
 	std::string command;
-	uint8_t choice;
+	int8_t choice;
 
 	while (true) {
 		std::cout << "+------------------------------------------------+" << std::endl;
@@ -33,28 +33,54 @@ void CommandLine::run() {
 		choice = processing_command(command);
 
 		switch (choice) {
-			default:
-				std::cout << "This command does not exist! Try again! [-]" << std::endl;
-				continue;
-			case 0:
+			case 0: {
 				this->exit();
 				break;
-			case 1:
+			}
+			case 1: {
 				this->help();
 				continue;
-			case 2:
-				this->connection.list();
+			}
+			case 2: {
+				std::list<std::string> list;
+
+				if (this->connection.list(list)) {
+					std::cout << "Try again! [-]" << std::endl;
+					continue;
+				}
+
+				if (list.empty()) {
+					std::cout << "No files available. Try again! [-]" << std::endl;
+					continue;
+				}
+
+				std::cout << "Commands list: " << std::endl;
+
+				for (auto& item : list) {
+					std::cout << "\t" << item;
+				}
+
+				std::cout << std::endl;
 				continue;
-			case 3:
-				std::string path;
+			}
+			case 3: {
+				std::filesystem::path filename;
+				std::regex regex("get\\s+(\\S+)");
+				std::smatch match;
 
-				std::cout << "Write name of the file: ";
-				std::cin >> path;
+				if (std::regex_search(command, match, regex)) {
+					filename = match[1];
+				}
 
-				if (connection.get(path)) {
+				if (this->connection.get(filename)) {
 					std::cout << "Try again! [-]" << std::endl;
 				}
 				continue;
+			}
+			default: {
+				std::cout << "This command does not exist! Try again! [-]" << std::endl;
+				continue;
+			}
 		}
 		break;
 	}
@@ -77,15 +103,15 @@ void CommandLine::help() {
 }
 
 int8_t CommandLine::processing_command(const std::string& command) {
-	int8_t is_find = -1;
+	int8_t index = -1;
 
 	if (command.empty()) { return -1; }
 
 	for (auto& item : this->commands) {
-		++is_find;
+		++index;
 
 		if (command.find(item) == 0) {
-			return is_find;
+			return index;
 		}
 	}
 

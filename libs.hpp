@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <regex>
 #include <mutex>
 #include <array>
 #include <list>
@@ -17,3 +18,6 @@
 #include <netinet/in.h>
 
 #include <arpa/inet.h>
+
+const std::string START_MSG = "start";
+const std::string END_MSG = "end";

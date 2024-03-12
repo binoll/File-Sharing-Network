@@ -19,6 +19,8 @@ int8_t Dir::list_files(std::list<std::filesystem::path>& list) {
 }
 
 int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t offset, int64_t size) {
+	int64_t bytes;
+
 	if (path.empty()) {
 		std::cerr << "Error: User path is empty." << std::endl;
 		return -1;
@@ -50,12 +52,47 @@ int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t
 
 	file.read(reinterpret_cast<char*>(buf), size);
 
-	if ((size = file.gcount()) <= 0) {
-		std::cerr << "Error: Can read from the file." << std::endl;
+	if ((bytes = file.gcount()) != size) {
+		std::cerr << "Error: Can not read from the file." << std::endl;
 		file.close();
 		return -1;
 	}
-	return size;
+	return bytes;
+}
+
+int64_t Dir::set_file(const std::filesystem::path& path, std::byte* buf, int64_t size) {
+	int64_t bytes;
+
+	if (path.empty()) {
+		std::cerr << "Error: User path is empty." << std::endl;
+		return -1;
+	}
+
+	if (this->work_path.empty()) {
+		std::cerr << "Error: Work path is empty." << std::endl;
+		return -1;
+	}
+
+	if (this->is_exist(path)) {
+		std::cerr << "Error: File does not exist." << std::endl;
+		return -1;
+	}
+
+	std::ofstream file(path, std::ios_base::binary);
+
+	if (!file.is_open()) {
+		std::cerr << "Error: Can not open the file." << std::endl;
+		return -1;
+	}
+
+	file.write(reinterpret_cast<char*>(buf), size);
+
+	if ((bytes = file.tellp()) != size) {
+		std::cerr << "Error: Can not write in the file." << std::endl;
+		file.close();
+		return -1;
+	}
+	return bytes;
 }
 
 int8_t Dir::set_work_path(const std::string& path) {

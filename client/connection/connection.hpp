@@ -20,7 +20,7 @@ class Connection {
 	int8_t create_connection(const std::string&, uint64_t);
 
 	// Push names of files available on the server in the list.
-	int8_t list(std::list<std::filesystem::path>&);
+	int8_t list(std::list<std::string>&);
 
 	// Download file from server.
 	int8_t get(const std::filesystem::path&);
@@ -35,14 +35,25 @@ class Connection {
 	// Send list of files to the server.
 	int8_t send_list();
 
+	// Send part of the file to the server.
+	int8_t send_file(const std::string&, int64_t, int64_t);
+
 	// Send file to the server.
-	int8_t send_file(const std::string&);
+	int8_t send_file(const std::string& path, int64_t);
 
-	// Send error msg to the server.
-	int8_t send_err(const std::string&);
+	// Send msg to the server.
+	int8_t send_msg(const std::string&);
 
-	// Send response to the server.
-	void send_response(std::byte* buf, uint64_t size);
+	/*
+	 * Send response to the server.
+	 *
+	 * Commands from server:
+	 * 1. list - send list of files.
+	 * 2. get:[size]:[filename] - send file.
+	 * 3. part:[offset]:[bytes]:[filename] - send part of file.
+	 *
+	 */
+	void send_response(std::byte* buf, uint64_t bytes);
 
 	Dir dir;
 	std::thread listen;

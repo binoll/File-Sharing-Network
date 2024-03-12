@@ -22,5 +22,5 @@ class CommandLine {
 	int8_t processing_command(const std::string&);
 
 	Connection connection;
-	std::vector<std::string> commands = {"exit", "help", "list", "get_file"};
+	std::vector<std::string> commands = {"exit", "help", "list", "get"};
 };
