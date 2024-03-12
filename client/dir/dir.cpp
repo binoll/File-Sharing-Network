@@ -1,58 +1,88 @@
 #include "dir.hpp"
 
-#include <utility>
+Dir::Dir(const std::string& path) : work_path(path) { }
 
-Dir::Dir(std::string& path) : dir(path) { }
-
-void Dir::list_files(std::list<std::filesystem::path>& list) {
+int8_t Dir::list_files(std::list<std::filesystem::path>& list) {
 	if (!list.empty()) {
 		list.clear();
 	}
 
-	for (auto& file : this->dir) {
-		list.push_back(file.filename());
-	}
-}
-
-int64_t Dir::get_file(std::filesystem::path& path, std::vector<char>& buf, uint64_t size) {
-	if (path.empty()) {
+	if (this->work_path.empty()) {
+		std::cerr << "Error: Work path is empty." << std::endl;
 		return -1;
 	}
 
-	for (auto& item : this->dir) {
+	for (auto& file : this->work_path) {
+		list.push_back(file.filename());
+	}
+	return 0;
+}
+
+int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t off, int64_t size) {
+	if (path.empty()) {
+		std::cerr << "Error: User path is empty." << std::endl;
+		return -1;
+	}
+
+	if (this->work_path.empty()) {
+		std::cerr << "Error: Work path is empty." << std::endl;
+		return -1;
+	}
+
+	for (auto& item : this->work_path) {
 		if (!item.filename().compare(path.filename())) {
 			continue;
 		}
 
-		return this->copy(path, buf, size);
-	}
+		std::ifstream file(path, std::ios_base::binary);
+		int64_t size_read;
 
+		if (!file.is_open()) {
+			std::cerr << "Error: Can not open the file." << std::endl;
+			return -1;
+		}
+
+		file.seekg(std::streampos(off), std::ios_base::beg);
+
+		if (file.tellg() == -1) {
+			file.close();
+			return -2;
+		}
+
+		size_read = std::min<int64_t>(size, ONE_KB);
+		file.read(reinterpret_cast<char*>(buf), size_read);
+
+		if (file.gcount() <= 0) {
+			std::cerr << "Error: Can read from the file." << std::endl;
+			file.close();
+			return -1;
+		}
+		return size_read;
+	}
 	return -1;
 }
 
-int64_t Dir::copy(std::filesystem::path& path, std::vector<char>& buf, uint64_t size) {
-	static std::ifstream file(path, std::ios_base::in | std::ios_base::binary);
-	int64_t size_read;
+int8_t Dir::set_work_path(const std::string& path) {
+	std::filesystem::directory_entry entry(path);
 
-	if (!file.is_open()) {
-		std::perror("Error");
-		std::cout << std::endl;
+	if (!entry.exists()) {
+		try {
+			std::filesystem::create_directory(entry);
+		} catch (std::exception& err) {
+			std::cerr << "Error: Can not create the dir." << std::endl;
+			return -1;
+		}
+	}
+
+	if (!entry.is_directory()) {
+		std::cerr << "Error: The path is not dir." << std::endl;
 		return -1;
 	}
 
-	if (file.tellg() == -1) {
-		std::perror("Error");
-		std::cout << std::endl;
-		file.close();
-		return -1;
-	}
-
-	file.read(static_cast<char*>(buf.data()), size);
-	size_read = file.gcount();
-	file.close();
-	return size_read;
+	this->work_path = std::filesystem::path(path);
+	return 0;
 }
 
-void Dir::set_dir(std::filesystem::path new_dir) {
-	this->dir = std::move(new_dir);
+std::filesystem::path Dir::get_path() {
+	return this->work_path;
 }

@@ -6,11 +6,13 @@
 
 class CommandLine {
  public:
-	CommandLine();
+	explicit CommandLine(std::string&);
 
-	~CommandLine();
+	~CommandLine() = default;
 
 	void run();
+
+	int8_t update_dir(const std::string&);
 
  private:
 	void exit();
@@ -19,7 +21,6 @@ class CommandLine {
 
 	int8_t processing_command(const std::string&);
 
-	Dir dir;
 	Connection connection;
 	std::vector<std::string> commands = {"exit", "help", "list", "get_file"};
 };

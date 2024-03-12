@@ -1,47 +1,24 @@
 #include "command_line.hpp"
 
-CommandLine::CommandLine() {
-	std::filesystem::directory_entry entry;
+CommandLine::CommandLine(std::string& path) : connection(path) {
 	std::string exit = "exit";
 
 	std::cout << "Welcome to file sharing app!" << std::endl;
 
 	while (true) {
-		std::string path;
+		std::string user_path;
 
-		std::cout << "Write path to work dir (for exit\"exit\"): ";
-		std::cin >> path;
-		std::cout << std::endl;
+		std::cout << "Write path: ";
+		std::cin >> user_path;
 
-		if (path.contains(exit)) {
+		if (user_path == exit) {
 			this->exit();
 		}
 
-		if (path.empty()) {
-			std::perror("Error");
+		if (this->update_dir(user_path) == -1) {
 			std::cout << "Try again! [-]" << std::endl;
 			continue;
 		}
-
-		entry = std::filesystem::directory_entry(path);
-
-		if (!entry.exists()) {
-			try {
-				std::filesystem::create_directory(entry);
-			} catch (std::exception& err) {
-				std::perror("Error");
-				std::cout << "Try again! [-]" << std::endl;
-				continue;
-			}
-		}
-
-		if (!entry.is_directory()) {
-			std::perror("Error");
-			std::cout << "Try again! [-]" << std::endl;
-			continue;
-		}
-
-		dir.set_dir(entry.path());
 
 		std::cout << "Dir is correct! [+]" << std::endl;
 		break;
@@ -50,24 +27,21 @@ CommandLine::CommandLine() {
 	std::cout << "The connection is established! [+]" << std::endl;
 }
 
-CommandLine::~CommandLine() {
-
-}
-
 void CommandLine::run() {
 	std::string command;
 	uint8_t choice;
 
-	std::cout << "Welcome to file sharing app!" << std::endl;
-
 	while (true) {
-		std::cout << "Write the command (write \"help\" for help): ";
+		std::cout << "+----------------------------------------------------+" << std::endl;
+		std::cout << "Command (for help - \"help\"): ";
 		std::cin >> command;
-		std::cout << std::endl;
 
 		choice = processing_command(command);
 
 		switch (choice) {
+			default:
+				std::cout << "This command does not exist! Try again! [-]" << std::endl;
+				continue;
 			case 0:
 				this->exit();
 				break;
@@ -75,22 +49,29 @@ void CommandLine::run() {
 				this->help();
 				continue;
 			case 2:
-
+				this->connection.list();
 				continue;
 			case 3:
+				std::string path;
 
-				continue;
-			default:
-				std::cout << "This command does not exist! Try again! [-]" << std::endl;
+				std::cout << "Write name of the file: ";
+				std::cin >> path;
+
+				if (connection.get(path)) {
+					std::cout << "Try again! [-]" << std::endl;
+				}
 				continue;
 		}
 		break;
 	}
 }
 
+int8_t CommandLine::update_dir(const std::string& path) {
+	return this->connection.update_dir(path);
+}
+
 void CommandLine::exit() {
 	std::cout << "Goodbye!" << std::endl;
-	this->~CommandLine();
 }
 
 void CommandLine::help() {
@@ -98,7 +79,7 @@ void CommandLine::help() {
 			<< "\t1. exit" << std::endl
 			<< "\t2. help" << std::endl
 			<< "\t3. list" << std::endl
-			<< "\t4. get_file [filename]" << std::endl;
+			<< "\t4. get [filename]" << std::endl;
 }
 
 int8_t CommandLine::processing_command(const std::string& command) {

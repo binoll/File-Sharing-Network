@@ -4,18 +4,18 @@
 
 class Dir {
  public:
-	explicit Dir(std::string& path);
+	explicit Dir(const std::string&);
 
 	~Dir() = default;
 
-	void list_files(std::list<std::filesystem::path>&);
+	int64_t get_file(const std::filesystem::path&, std::byte*, int64_t, int64_t);
 
-	int64_t get_file(std::filesystem::path&, std::vector<char>&, uint64_t);
+	int8_t list_files(std::list<std::filesystem::path>&);
 
-	void set_dir(std::filesystem::path);
+	int8_t set_work_path(const std::string&);
+
+	std::filesystem::path get_path();
 
  private:
-	static int64_t copy(std::filesystem::path&, std::vector<char>&, uint64_t);
-
-	std::filesystem::path dir;
+	std::filesystem::path work_path;
 };
