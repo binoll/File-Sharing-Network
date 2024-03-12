@@ -7,6 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <cstddef>
 
 // Структура для хранения данных о клиенте
 struct ClientData {
@@ -25,15 +26,12 @@ void *client_handler(void *arg) {
 	client_port = ntohs(client_data->client_addr.sin_port);
 	printf("Установлено соединение с клиентом: %s:%d\n", client_ip, client_port);
 
-	char buffer[1024];
+	std::byte buffer[1024];
 	ssize_t bytes_received;
 
 	while ((bytes_received = recv(client_data->socket_fd, buffer, sizeof(buffer), 0)) > 0) {
-		buffer[bytes_received] = '\0';
-		printf("%s:%d: %s\n", client_ip, client_port, buffer);
-
-		// Отправляем сообщение обратно клиенту
-		send(client_data->socket_fd, buffer, bytes_received, 0);
+		printf("%s:%d: %s\n", client_ip, client_port, reinterpret_cast<char*>(buffer));
+		memset(buffer, 0, 1024);
 	}
 
 	if (bytes_received == -1) {
@@ -91,7 +89,8 @@ int main(void) {
 		}
 
 		// Создаем структуру данных для клиента
-		struct ClientData *client_data = malloc(sizeof(struct ClientData));
+		struct ClientData *client_data = static_cast<ClientData*>(malloc(sizeof(struct ClientData)));
+
 		if (!client_data) {
 			perror("malloc failed");
 			close(SocketFD);

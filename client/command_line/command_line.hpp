@@ -15,9 +15,9 @@ class CommandLine {
 	int8_t update_dir(const std::string&);
 
  private:
-	void exit();
+	static void exit();
 
-	void help();
+	static void help();
 
 	int8_t processing_command(const std::string&);
 

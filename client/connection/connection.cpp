@@ -49,7 +49,6 @@ int8_t Connection::update_dir(const std::string& path) {
 }
 
 int8_t Connection::list(std::list<std::string>& list) {
-	std::lock_guard<std::mutex> lock(mutex);
 	std::byte buf[ONE_KB];
 	int64_t bytes;
 	std::string command = "list";
@@ -84,11 +83,10 @@ int8_t Connection::list(std::list<std::string>& list) {
 	return 0;
 }
 
-int8_t Connection::get(const std::filesystem::path& path) {
-	std::lock_guard<std::mutex> lock(mutex);
+int8_t Connection::get(const std::string& path) {
 	std::byte buf[ONE_KB];
 	int64_t bytes;
-	std::string command = "get:" + path.filename().string();
+	std::string command = "get:" + path;
 
 	if (this->send_msg(command) == -1) {
 		return -1;
@@ -125,8 +123,6 @@ void Connection::listen_server() {
 	int64_t bytes;
 
 	while (true) {
-		std::lock_guard<std::mutex> lock(mutex);
-
 		if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) > 0) {
 			this->send_response(buf, bytes);
 		}

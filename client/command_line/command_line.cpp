@@ -13,12 +13,26 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 			std::cout << "Try again! [-]" << std::endl;
 			continue;
 		}
-
 		std::cout << "Dir is correct! [+]" << std::endl;
 		break;
 	}
 
-	std::cout << "The connection is established! [+]" << std::endl;
+	while (true) {
+		std::string ip;
+		uint64_t port;
+
+		std::cout << "Write the ip-address: ";
+		std::cin >> ip;
+		std::cout << "Write the port: ";
+		std::cin >> port;
+
+		if (this->connection.create_connection(ip, port) == -1) {
+			std::cout << "Try again! [-]" << std::endl;
+			continue;
+		}
+		std::cout << "The connection is established! [+]" << std::endl;
+		break;
+	}
 }
 
 void CommandLine::run() {
@@ -34,17 +48,17 @@ void CommandLine::run() {
 
 		switch (choice) {
 			case 0: {
-				this->exit();
+				exit();
 				break;
 			}
 			case 1: {
-				this->help();
+				help();
 				continue;
 			}
 			case 2: {
 				std::list<std::string> list;
 
-				if (this->connection.list(list)) {
+				if (this->connection.list(list) == -1) {
 					std::cout << "Try again! [-]" << std::endl;
 					continue;
 				}
@@ -64,15 +78,17 @@ void CommandLine::run() {
 				continue;
 			}
 			case 3: {
-				std::filesystem::path filename;
-				std::regex regex("get\\s+(\\S+)");
-				std::smatch match;
+				std::string filename;
 
-				if (std::regex_search(command, match, regex)) {
-					filename = match[1];
+				std::cout << "Write the name of the file: ";
+				std::cin >> filename;
+
+				if (filename.empty()) {
+					std::cout << "The name of the file is empty. Try again! [-]" << std::endl;
+					continue;
 				}
 
-				if (this->connection.get(filename)) {
+				if (this->connection.get(filename) == -1) {
 					std::cout << "Try again! [-]" << std::endl;
 				}
 				continue;
@@ -99,7 +115,7 @@ void CommandLine::help() {
 			<< "\t1. exit" << std::endl
 			<< "\t2. help" << std::endl
 			<< "\t3. list" << std::endl
-			<< "\t4. get [filename]" << std::endl;
+			<< "\t4. get" << std::endl;
 }
 
 int8_t CommandLine::processing_command(const std::string& command) {

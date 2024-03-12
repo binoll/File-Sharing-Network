@@ -23,7 +23,7 @@ class Connection {
 	int8_t list(std::list<std::string>&);
 
 	// Download file from server.
-	int8_t get(const std::filesystem::path&);
+	int8_t get(const std::string&);
 
 	// Update work dir.
 	int8_t update_dir(const std::string&);
