@@ -4,17 +4,26 @@
 
 class Dir {
  public:
+	// Constructor.
 	explicit Dir(const std::string&);
 
+	// Destructor.
 	~Dir() = default;
 
-	int64_t get_file(const std::filesystem::path&, std::byte*, int64_t, int64_t);
-
+	// Push in list files at current dir.
 	int8_t list_files(std::list<std::filesystem::path>&);
 
+	// Push in buf part of file
+	int64_t get_file(const std::filesystem::path&, std::byte*, int64_t, int64_t);
+
+	// Set work path.
 	int8_t set_work_path(const std::string&);
 
-	std::filesystem::path get_path();
+	// Checks if there is a file in the current dir.
+	bool is_exist(const std::filesystem::path&);
+
+	// Return current path.
+	std::filesystem::path get_work_path();
 
  private:
 	std::filesystem::path work_path;

@@ -18,7 +18,7 @@ int8_t Dir::list_files(std::list<std::filesystem::path>& list) {
 	return 0;
 }
 
-int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t off, int64_t size) {
+int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t offset, int64_t size) {
 	if (path.empty()) {
 		std::cerr << "Error: User path is empty." << std::endl;
 		return -1;
@@ -29,37 +29,33 @@ int64_t Dir::get_file(const std::filesystem::path& path, std::byte* buf, int64_t
 		return -1;
 	}
 
-	for (auto& item : this->work_path) {
-		if (!item.filename().compare(path.filename())) {
-			continue;
-		}
-
-		std::ifstream file(path, std::ios_base::binary);
-		int64_t size_read;
-
-		if (!file.is_open()) {
-			std::cerr << "Error: Can not open the file." << std::endl;
-			return -1;
-		}
-
-		file.seekg(std::streampos(off), std::ios_base::beg);
-
-		if (file.tellg() == -1) {
-			file.close();
-			return -2;
-		}
-
-		size_read = std::min<int64_t>(size, ONE_KB);
-		file.read(reinterpret_cast<char*>(buf), size_read);
-
-		if (file.gcount() <= 0) {
-			std::cerr << "Error: Can read from the file." << std::endl;
-			file.close();
-			return -1;
-		}
-		return size_read;
+	if (this->is_exist(path)) {
+		std::cerr << "Error: File does not exist." << std::endl;
+		return -1;
 	}
-	return -1;
+
+	std::ifstream file(path, std::ios_base::binary);
+
+	if (!file.is_open()) {
+		std::cerr << "Error: Can not open the file." << std::endl;
+		return -1;
+	}
+
+	file.seekg(std::streampos(offset), std::ios_base::beg);
+
+	if (file.tellg() == -1) {
+		file.close();
+		return -2;
+	}
+
+	file.read(reinterpret_cast<char*>(buf), size);
+
+	if ((size = file.gcount()) <= 0) {
+		std::cerr << "Error: Can read from the file." << std::endl;
+		file.close();
+		return -1;
+	}
+	return size;
 }
 
 int8_t Dir::set_work_path(const std::string& path) {
@@ -83,6 +79,14 @@ int8_t Dir::set_work_path(const std::string& path) {
 	return 0;
 }
 
-std::filesystem::path Dir::get_path() {
+bool Dir::is_exist(const std::filesystem::path& path) {
+	for (auto& item : this->work_path) {
+		if (item.filename() == path.filename()) { return true; }
+	}
+	return false;
+}
+
+// Return current path.
+std::filesystem::path Dir::get_work_path() {
 	return this->work_path;
 }

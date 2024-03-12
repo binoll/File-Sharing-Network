@@ -25,7 +25,7 @@ int8_t Connection::create_connection(const std::string& ip, uint64_t port) {
 	}
 
 	if (inet_pton(AF_INET, ip.c_str(), &this->server.addr.sin_addr) == -1) {
-		std::cerr << "Error: Bad ip address." << std::endl;
+		std::cerr << "Error: Bad ip-address ot port." << std::endl;
 		return -1;
 	}
 
@@ -44,7 +44,7 @@ int8_t Connection::create_connection(const std::string& ip, uint64_t port) {
 	return 0;
 }
 
-int8_t Connection::list() {
+int8_t Connection::list(std::list<std::filesystem::path>& list) {
 
 }
 
@@ -70,7 +70,7 @@ void Connection::listen_server() {
 }
 
 int8_t Connection::send_list() {
-	for (auto& entry : std::filesystem::directory_iterator(this->dir.get_path())) {
+	for (auto& entry : std::filesystem::directory_iterator(this->dir.get_work_path())) {
 		const std::filesystem::path& filename = entry.path().filename();
 
 		if (send(this->server.fd, filename.c_str(), filename.string().size(), 0) == -1) {
@@ -121,7 +121,7 @@ void Connection::send_response(std::byte* buf, uint64_t size) {
 		std::string filename = request.substr(4);
 
 		if (this->send_file(filename) == -1) {
-			std::cerr << "Error: Can send file." << std::endl;
+			std::cerr << "Error: Can not send file." << std::endl;
 		}
 	} else {
 		std::string err = "Error: Unrecognized request.";

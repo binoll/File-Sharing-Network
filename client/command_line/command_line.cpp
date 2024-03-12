@@ -1,21 +1,15 @@
 #include "command_line.hpp"
 
 CommandLine::CommandLine(std::string& path) : connection(path) {
-	std::string exit = "exit";
-
 	std::cout << "Welcome to file sharing app!" << std::endl;
 
 	while (true) {
-		std::string user_path;
+		std::string work_path;
 
-		std::cout << "Write path: ";
-		std::cin >> user_path;
+		std::cout << "Write the dir: ";
+		std::cin >> work_path;
 
-		if (user_path == exit) {
-			this->exit();
-		}
-
-		if (this->update_dir(user_path) == -1) {
+		if (this->update_dir(work_path) == -1) {
 			std::cout << "Try again! [-]" << std::endl;
 			continue;
 		}
@@ -32,8 +26,8 @@ void CommandLine::run() {
 	uint8_t choice;
 
 	while (true) {
-		std::cout << "+----------------------------------------------------+" << std::endl;
-		std::cout << "Command (for help - \"help\"): ";
+		std::cout << "+------------------------------------------------+" << std::endl;
+		std::cout << "Write the command (for help - \"help\"): ";
 		std::cin >> command;
 
 		choice = processing_command(command);
