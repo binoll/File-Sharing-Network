@@ -3,6 +3,17 @@
 #include "../client.hpp"
 #include "../dir/dir.hpp"
 
+/*
+ * Commands from the server:
+ * 1. list - send list of files.
+ * 2. get:size:filename - send the file.
+ * 3. part:offset:size:filename - send part of the file.
+ *
+ * Commands to server:
+ *  1. list - send list of files.
+ *  2. get:filename - download the file.
+ *  3. exit - close connection with server.
+ */
 class Connection {
  public:
 	// Constructor.
@@ -19,6 +30,9 @@ class Connection {
 
 	// Download file from server.
 	int8_t get(const std::string&);
+
+	// Close connection with server.
+	int8_t exit();
 
 	// Update work dir.
 	int8_t update_dir(const std::string&);
@@ -39,19 +53,10 @@ class Connection {
 	// Send msg to the server.
 	int8_t send_msg(const std::string&);
 
-	/*
-	 * Send response to the server.
-	 *
-	 * Commands from server:
-	 * 1. list - send list of files.
-	 * 2. get:[size]:[filename] - send file.
-	 * 3. part:[offset]:[bytes]:[filename] - send part of file.
-	 *
-	 */
+	// Send response to the server.
 	void send_response(std::byte* buf, uint64_t bytes);
 
 	Dir dir;
 	std::thread listen;
-	std::mutex mutex;
 	struct data server;
 };

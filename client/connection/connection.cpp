@@ -11,7 +11,7 @@ Connection::~Connection() {
 		std::cerr << "Error: Can not terminate the thread." << std::endl;
 	}
 
-	if (close(this->server.fd) == -1) {
+	if (this->exit() == -1 || close(this->server.fd) == -1) {
 		std::cerr << "Error: Can not close the socket." << std::endl;
 	}
 }
@@ -44,14 +44,10 @@ int8_t Connection::create_connection(const std::string& ip, uint64_t port) {
 	return 0;
 }
 
-int8_t Connection::update_dir(const std::string& path) {
-	return this->dir.set_work_path(path);
-}
-
 int8_t Connection::list(std::list<std::string>& list) {
 	std::byte buf[ONE_KB];
 	int64_t bytes;
-	std::string command = "list";
+	const std::string& command = msg_client[0];
 
 	if (this->send_msg(command) == -1) {
 		return -1;
@@ -87,7 +83,7 @@ int8_t Connection::list(std::list<std::string>& list) {
 int8_t Connection::get(const std::string& path) {
 	std::byte buf[ONE_KB];
 	int64_t bytes;
-	std::string command = "get:" + path;
+	const std::string command = msg_client[1] + ':' + path;
 
 	if (this->send_msg(command) == -1) {
 		return -1;
@@ -122,6 +118,19 @@ int8_t Connection::get(const std::string& path) {
 	return 0;
 }
 
+int8_t Connection::exit() {
+	const std::string& command = msg_client[2];
+
+	if (this->send_msg(command) == -1) {
+		return -1;
+	}
+	return 0;
+}
+
+int8_t Connection::update_dir(const std::string& path) {
+	return this->dir.set_work_path(path);
+}
+
 void Connection::listen_server() {
 	std::byte buf[ONE_KB];
 	int64_t bytes;
@@ -134,6 +143,10 @@ void Connection::listen_server() {
 }
 
 int8_t Connection::send_list() {
+	if (this->send_msg(START_MSG) == -1) {
+		return -1;
+	}
+
 	for (auto& entry : std::filesystem::directory_iterator(this->dir.get_work_path())) {
 		const std::filesystem::path& filename = entry.path().filename();
 
@@ -141,12 +154,20 @@ int8_t Connection::send_list() {
 			return -1;
 		}
 	}
+
+	if (this->send_msg(END_MSG) == -1) {
+		return -1;
+	}
 	return 0;
 }
 
 int8_t Connection::send_file(const std::string& path, int64_t offset, int64_t size) {
 	std::byte buf[size];
 	int64_t bytes;
+
+	if (this->send_msg(START_MSG) == -1) {
+		return -1;
+	}
 
 	while (true) {
 		if ((bytes = this->dir.get_file(path, buf, offset, size)) == -1) {
@@ -159,6 +180,10 @@ int8_t Connection::send_file(const std::string& path, int64_t offset, int64_t si
 			return -1;
 		}
 		offset += size;
+	}
+
+	if (this->send_msg(END_MSG) == -1) {
+		return -1;
 	}
 	return 0;
 }
@@ -168,6 +193,10 @@ int8_t Connection::send_file(const std::string& path, int64_t size) {
 	int64_t offset = 0;
 	int64_t bytes;
 
+	if (this->send_msg(START_MSG) == -1) {
+		return -1;
+	}
+
 	while (true) {
 		if ((bytes = this->dir.get_file(path, buf, offset, size)) == -1) {
 			return -1;
@@ -179,6 +208,10 @@ int8_t Connection::send_file(const std::string& path, int64_t size) {
 			return -1;
 		}
 		offset += size;
+	}
+
+	if (this->send_msg(END_MSG) == -1) {
+		return -1;
 	}
 	return 0;
 }
@@ -193,12 +226,12 @@ int8_t Connection::send_msg(const std::string& msg) {
 void Connection::send_response(std::byte* buf, uint64_t bytes) {
 	std::string msg(reinterpret_cast<char*>(buf), bytes);
 
-	if (msg == "list") {
+	if (msg == msg_server[0]) {
 		if (this->send_list() == -1) {
 			return;
 		}
-	} else if (msg.find("part:") == 0) {
-		std::regex regex("part:([0-9]+):([0-9]+):(.+)");
+	} else if (msg.find(msg_server[1]) == 0) {
+		std::regex regex(msg_server[1] + ":([0-9]+):([0-9]+):(.+)");
 		std::smatch match;
 		std::string filename;
 		int64_t offset = 0;
@@ -213,8 +246,8 @@ void Connection::send_response(std::byte* buf, uint64_t bytes) {
 		if (this->send_file(filename, offset, size) == -1) {
 			return;
 		}
-	} else if (msg.find("get:") == 0) {
-		std::regex regex("get:([0-9]+):(.+)");
+	} else if (msg.find(msg_server[2]) == 0) {
+		std::regex regex(msg_server[2] + ":([0-9]+):(.+)");
 		std::smatch match;
 		std::string filename;
 		int64_t size = 0;
@@ -224,9 +257,7 @@ void Connection::send_response(std::byte* buf, uint64_t bytes) {
 			filename = match[2];
 		}
 
-		if (send(this->server.fd, START_MSG.c_str(), START_MSG.size(), 0) == -1 ||
-				this->send_file(filename, size) == -1 ||
-				send(this->server.fd, END_MSG.c_str(), END_MSG.size(), 0) == -1) {
+		if (this->send_file(filename, size) == -1) {
 			return;
 		}
 	} else {

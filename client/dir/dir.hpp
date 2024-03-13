@@ -32,6 +32,9 @@ class Dir {
 	// Return current path.
 	std::filesystem::path get_work_path();
 
+	// Calculate and return hash.
+	static uint64_t calculate_hash(const std::string& filename);
+
  private:
 	std::filesystem::path work_path;
 };

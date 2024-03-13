@@ -85,6 +85,7 @@ int64_t Dir::set_file(const std::filesystem::path& path, std::byte* buf, int64_t
 		return -1;
 	}
 
+	file.seekp(std::ios_base::end);
 	file.write(reinterpret_cast<char*>(buf), size);
 
 	if ((bytes = file.tellp()) != size) {
@@ -123,7 +124,29 @@ bool Dir::is_exist(const std::filesystem::path& path) {
 	return false;
 }
 
-// Return current path.
 std::filesystem::path Dir::get_work_path() {
 	return this->work_path;
+}
+
+uint64_t Dir::calculate_hash(const std::string& filename) {
+	std::ifstream file(filename, std::ios::binary);
+	constexpr uint64_t block_size = 4 * ONE_KB;
+	std::vector<char> buffer(block_size);
+	std::hash<std::string> hasher;
+	std::size_t hash_value = 0;
+
+	if (!file.is_open()) {
+		std::cerr << "Error: Can not open the file: " << filename << std::endl;
+		return 0;
+	}
+
+	while (file.read(buffer.data(), block_size)) {
+		hash_value ^= hasher(std::string(buffer.data(), file.gcount()));
+	}
+
+	if (file.eof() && file.gcount() > 0) {
+		hash_value ^= hasher(std::string(buffer.data(), file.gcount()));
+	}
+
+	return hash_value;
 }

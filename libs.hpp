@@ -21,7 +21,5 @@
 
 const std::string START_MSG = "start";
 const std::string END_MSG = "end";
-struct data {
-	int32_t fd;
-	sockaddr_in addr;
-};
+const std::vector<std::string> msg_client = {"list", "get", "exit"};
+const std::vector<std::string> msg_server = {"list", "part", "get", "exit"};
