@@ -17,7 +17,6 @@ class Dir {
 	 * Push in buf part of file.
 	 *
 	 * Return -2 if EOF.
-	 *
 	 */
 	int64_t get_file(const std::filesystem::path&, std::byte*, int64_t, int64_t);
 

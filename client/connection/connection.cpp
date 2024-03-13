@@ -69,7 +69,8 @@ int8_t Connection::list(std::list<std::string>& list) {
 				return -1;
 			}
 
-			std::string msg(reinterpret_cast<char*>(buf), bytes);
+			msg.clear();
+			msg.append(reinterpret_cast<char*>(buf), bytes);
 
 			if (msg == END_MSG) {
 				break;
@@ -103,6 +104,9 @@ int8_t Connection::get(const std::string& path) {
 			if ((bytes = recv(this->server.fd, buf, sizeof(buf), 0)) <= 0) {
 				return -1;
 			}
+
+			msg.clear();
+			msg.append(reinterpret_cast<char*>(buf), bytes);
 
 			if (msg == END_MSG) {
 				break;

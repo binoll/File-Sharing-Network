@@ -3,11 +3,6 @@
 #include "../client.hpp"
 #include "../dir/dir.hpp"
 
-struct data {
-	int32_t fd;
-	sockaddr_in addr;
-};
-
 class Connection {
  public:
 	// Constructor.
