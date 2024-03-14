@@ -149,8 +149,10 @@ int8_t Connection::send_list() {
 
 	for (auto& entry : std::filesystem::directory_iterator(this->dir.get_work_path())) {
 		const std::filesystem::path& filename = entry.path().filename();
+		uint64_t hash = Dir::calculate_hash(filename);
+		std::string file = filename.string() + ':' + std::to_string(hash);
 
-		if (send(this->server.fd, filename.c_str(), filename.string().size(), 0) == -1) {
+		if (send(this->server.fd, file.c_str(), file.size(), 0) == -1) {
 			return -1;
 		}
 	}

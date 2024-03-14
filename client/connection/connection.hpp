@@ -10,7 +10,7 @@
  * 3. part:offset:size:filename - send part of the file.
  *
  * Commands to server:
- *  1. list - send list of files.
+ *  1. list (filename:[hash]) - send list of files.
  *  2. get:filename - download the file.
  *  3. exit - close connection with server.
  */
