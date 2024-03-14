@@ -39,6 +39,11 @@ int8_t Connection::create_connection(const std::string& ip, uint64_t port) {
 		return -1;
 	}
 
+	if (this->send_list() == -1) {
+		std::cerr << "Error: Can not send list of files to the server." << std::endl;
+		return -1;
+	}
+
 	listen = std::thread(&Connection::listen_server, this);
 	listen.detach();
 	return 0;
