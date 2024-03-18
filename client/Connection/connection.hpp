@@ -5,12 +5,12 @@
 
 /*
  * Commands from the server:
- * 1. list - send fileMap of clients.
+ * 1. list - send storage of clients.
  * 2. get:size:filename - send the file.
  * 3. part:offset:size:filename - send part of the file.
  *
  *  Commands to server:
- *  1. list (filename:[hash]) - send fileMap of clients.
+ *  1. list (filename:[hash]) - send storage of clients.
  *  2. get:filename - download the file.
  *  3. exit - close Connection with server.
  */

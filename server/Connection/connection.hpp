@@ -15,9 +15,9 @@ class Connection {
 
 	bool createConnection();
 
- private:
 	void connectToClients();
 
+ private:
 	void handleClient(ssize_t);
 
 	std::string receive(ssize_t fd);
@@ -39,5 +39,6 @@ class Connection {
 	ssize_t socket_fd;
 	struct sockaddr_in addr;
 	size_t port;
-	std::unordered_map<ssize_t, FileInfo> fileMap;
+	std::unordered_map<ssize_t, FileInfo> storage;
+	std::vector<std::thread> threads_client;
 };

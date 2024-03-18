@@ -61,7 +61,7 @@ void CommandLine::run() {
 					continue;
 				}
 
-				std::cout << "Commands fileMap: " << std::endl;
+				std::cout << "Commands storage: " << std::endl;
 
 				for (auto& item : list) {
 					std::cout << "\t" << item;
@@ -99,10 +99,10 @@ void CommandLine::exit() {
 }
 
 void CommandLine::help() {
-	std::cout << "Commands fileMap: " << std::endl
+	std::cout << "Commands storage: " << std::endl
 			<< "\t1. exit" << std::endl
 			<< "\t2. help" << std::endl
-			<< "\t3. fileMap" << std::endl
+			<< "\t3. storage" << std::endl
 			<< "\t4. get" << std::endl;
 }
 
