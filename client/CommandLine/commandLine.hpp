@@ -1,8 +1,7 @@
 #pragma once
 
 #include "../client.hpp"
-#include "../connection/connection.hpp"
-#include "../dir/dir.hpp"
+#include "../Connection/connection.hpp"
 
 class CommandLine {
  public:
@@ -11,8 +10,6 @@ class CommandLine {
 	~CommandLine() = default;
 
 	void run();
-
-	int8_t update_dir(const std::string&);
 
  private:
 	static void exit();
