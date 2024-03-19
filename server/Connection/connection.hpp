@@ -13,16 +13,16 @@ class Connection {
 
 	~Connection();
 
-	bool createConnection();
-
-	void connectToClients();
+	void createConnection();
 
  private:
 	void handleClient(ssize_t);
 
-	std::string receive(ssize_t fd);
+	std::string receive(ssize_t);
 
-	void sendMsg(ssize_t fd, const std::string& response);
+	void updateStorage(ssize_t);
+
+	void sendMsgToClient(ssize_t fd, const std::string& msg);
 
 	void sendFile(ssize_t, const std::string&);
 
@@ -40,5 +40,7 @@ class Connection {
 	struct sockaddr_in addr;
 	size_t port;
 	std::unordered_map<ssize_t, FileInfo> storage;
-	std::vector<std::thread> threads_client;
+	std::unique_ptr<std::thread> client_thread;
+	const std::string start_marker = marker[0];
+	const std::string end_marker = marker[1];
 };

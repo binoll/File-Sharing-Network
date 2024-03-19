@@ -9,9 +9,6 @@ int32_t main() {
 
 	Connection connection(port);
 
-	if (!connection.createConnection()) {
-		return EXIT_FAILURE;
-	}
-	connection.connectToClients();
+	connection.createConnection();
 	return EXIT_SUCCESS;
 }

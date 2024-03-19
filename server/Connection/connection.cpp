@@ -1,22 +1,18 @@
 #include "connection.hpp"
+#include "../ThreadPool/threadPool.hpp"
 
 Connection::Connection(size_t port) : port(port) { }
 
 Connection::~Connection() {
-	for (auto& thread : threads_client) {
-		if (thread.joinable()) {
-			thread.join();
-		}
-	}
 	close(socket_fd);
 }
 
-bool Connection::createConnection() {
+void Connection::createConnection() {
 	socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (socket_fd < 0) {
 		std::cerr << "Error: Can not create socket" << std::endl;
-		return false;
+		return;
 	}
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = INADDR_ANY;
@@ -26,43 +22,38 @@ bool Connection::createConnection() {
 	         reinterpret_cast<struct sockaddr*>(&addr),
 	         sizeof(addr)) < 0) {
 		std::cerr << "[-] Error: Can not bind the socket" << std::endl;
-		return false;
+		return;
 	}
 	if (listen(socket_fd, 5) < 0) {
 		std::cerr << "[-] Error: Listen failed" << std::endl;
-		return false;
+		return;
 	}
-	std::cout << "[+] Server listening on port: " << port << std::endl;
-	return true;
-}
-
-void Connection::connectToClients() {
 	std::cout << "Server is listening for connections..." << std::endl;
 
 	while (true) {
 		ssize_t fd;
 		struct sockaddr_in addr;
 		socklen_t addr_len = sizeof(addr);
-
 		fd = accept(socket_fd, (struct sockaddr*) &addr, &addr_len);
 
 		if (fd < 0) {
-			std::cerr << "Error: Accept failed" << std::endl;
+			std::cerr << "[-] Error: Failed to accept connection" << std::endl;
 			continue;
 		}
 		std::cout << "[+] Client connected. Ip: " << inet_ntoa(addr.sin_addr)
 				<< " port: " << addr.sin_port << std::endl;
-		std::thread thread_client(&Connection::handleClient, this, fd);
-		thread_client.detach();
-		threads_client.push_back(std::move(thread_client));
+
+		handleClient(fd);
 	}
 }
 
 void Connection::handleClient(ssize_t fd) {
 	std::string command;
 	const std::string& command_list = commands_client[0];
-	const std::string& command_get = commands_client[1]+ ':';
+	const std::string& command_get = commands_client[1] + ':';
 	const std::string& command_exit = commands_client[2];
+
+	updateStorage(fd);
 
 	while (!(command = receive(fd)).empty()) {
 		if (command.find(command_list) == 0) {
@@ -73,7 +64,7 @@ void Connection::handleClient(ssize_t fd) {
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
 			sendFile(fd, filename);
-		} else if (command.find(command_exit)) {
+		} else if (command.find(command_exit) == 0) {
 			close(fd);
 			std::cout << "[-] Client disconnected" << std::endl;
 			break;
@@ -93,8 +84,46 @@ std::string Connection::receive(ssize_t fd) {
 	return "";
 }
 
-void Connection::sendMsg(ssize_t fd, const std::string& response) {
-	send(fd, response.c_str(), response.size(), 0);
+void Connection::updateStorage(ssize_t fd) {
+	const std::string& command_list = commands_client[0];
+	std::string response;
+	size_t pos_start;
+
+	sendMsgToClient(fd, command_list);
+	response = receive(fd);
+	pos_start = response.find(start_marker);
+
+	if (pos_start == std::string::npos) {
+		std::cerr << "[-] Error: Failed to update storage" << std::endl;
+		return;
+	}
+	do {
+		if (response.empty()) {
+			continue;
+		}
+		response.erase(pos_start, start_marker.length());
+		std::istringstream iss(response);
+		std::string file_info;
+		std::string filename;
+		std::string hash;
+
+		while (std::getline(iss, file_info, ' ') && file_info != end_marker) {
+			std::istringstream file_stream(file_info);
+			std::getline(file_stream, filename, ':');
+			std::getline(file_stream, hash);
+
+			if (!filename.empty() && !hash.empty()) {
+				storeFile(fd, filename, hash);
+			}
+		}
+		if (file_info == end_marker) {
+			return;
+		}
+	} while (!(response = receive(fd)).empty());
+}
+
+void Connection::sendMsgToClient(ssize_t fd, const std::string& msg) {
+	send(fd, msg.c_str(), msg.size(), 0);
 }
 
 void Connection::sendFileList(ssize_t fd) {
@@ -104,7 +133,7 @@ void Connection::sendFileList(ssize_t fd) {
 	for (const auto& file : files) {
 		list += file + ' ';
 	}
-	sendMsg(fd, list);
+	sendMsgToClient(fd, list);
 }
 
 void Connection::eraseFilesWithSameHash() {
@@ -152,7 +181,7 @@ void Connection::storeFile(ssize_t fd, const std::string& filename, const std::s
 	FileInfo data {hash, filename};
 	storage[fd] = data;
 
-	std::cout << "Stored filename: " << filename << " with hash: " << hash << " for user_id: " << fd << std::endl;
+	std::cout << "[+] Stored the file: " << filename << std::endl;
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {
