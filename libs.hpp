@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <filesystem>
 #include <iostream>
 #include <cstring>
@@ -13,6 +14,9 @@
 #include <mutex>
 #include <array>
 #include <list>
+#include <queue>
+#include <mutex>
+#include <functional>
 
 #include <sys/poll.h>
 #include <sys/socket.h>
@@ -24,4 +28,4 @@
 
 const std::vector<std::string> commands_client = {"list", "get", "exit"};
 const std::vector<std::string> commands_server = {"list", "get", "part", "exit"};
-const std::vector<std::string> marker = {"start:", ":end"};
+const std::vector<std::string> marker = {"start: ", ":end"};
