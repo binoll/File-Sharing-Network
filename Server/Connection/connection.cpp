@@ -1,63 +1,53 @@
 #include "connection.hpp"
 
-Connection::Connection(size_t port) : port(port) { }
+Connection::Connection(uint16_t port) : server_port(port), pool(BACKLOG) {
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = INADDR_ANY;
+	server_addr.sin_port = htons(port);
 
-Connection::~Connection() {
-	close(server_fd);
-}
-
-void Connection::createConnection() {
 	server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-
 	if (server_fd < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
 		return;
 	}
-	addr.sin_family = AF_INET;
-	addr.sin_addr.s_addr = INADDR_ANY;
-	addr.sin_port = htons(port);
-
 	if (bind(server_fd,
-	         reinterpret_cast<struct sockaddr*>(&addr),
-	         sizeof(addr)) < 0) {
+	         reinterpret_cast<struct sockaddr*>(&server_addr),
+	         sizeof(server_addr)) < 0) {
 		std::cerr << "[-] Error: Failed to bind the socket." << std::endl;
 		return;
 	}
-	if (listen(server_fd, 5) < 0) {
+	if (listen(server_fd, BACKLOG) < 0) {
 		std::cerr << "[-] Error: Failed to listen." << std::endl;
 		return;
 	}
+}
+
+Connection::~Connection() {
+	pool.~ThreadPool();
+	close(server_fd);
+}
+
+void Connection::waitConnect() {
 	std::cout << "[*] Wait: Server is listening for connections..." << std::endl;
 
 	while (true) {
-		ssize_t client_fd;
-		struct sockaddr_in addr;
-		socklen_t addr_len = sizeof(addr);
+		int32_t client_fd;
+		struct sockaddr_in client_addr;
+		socklen_t addr_len = sizeof(client_addr);
 
-		client_fd = accept(server_fd, reinterpret_cast<struct sockaddr*>(&addr), &addr_len);
+		client_fd = accept(server_fd, reinterpret_cast<struct sockaddr*>(&client_addr), &addr_len);
 		if (client_fd < 0) {
 			std::cerr << "[-] Error: Failed to accept connection." << std::endl;
 			continue;
 		}
-		std::cout << "[+] Success: Client connected. Ip: " << inet_ntoa(addr.sin_addr)
-				<< " port: " << addr.sin_port << '.' << std::endl;
+		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr.sin_addr)
+				<< ':' << client_addr.sin_port << '.' << std::endl;
 
-		switch (fork()) {
-			case 0: {
-				handleClient(client_fd);
-				continue;
-			}
-			default: {
-				std::cerr << "[-] Error: Failed to create child process..." << std::endl;
-				close(client_fd);
-				break;
-			}
-		}
-		break;
+		pool.enqueue([this, client_fd] { handleClient(client_fd); });
 	}
 }
 
-void Connection::handleClient(ssize_t client_fd) {
+void Connection::handleClient(int32_t client_fd) {
 	std::string command;
 	const std::string& command_list = commands_client[0];
 	const std::string& command_get = commands_client[1] + ':';
@@ -82,35 +72,30 @@ void Connection::handleClient(ssize_t client_fd) {
 	}
 }
 
-std::string Connection::receive(ssize_t client_fd) {
+std::string Connection::receive(int32_t client_fd) {
 	std::byte buffer[BUFFER_SIZE];
-	ssize_t bytes_read = recv(client_fd, buffer, BUFFER_SIZE, 0);
-	if (bytes_read > 0) {
-		return std::string(reinterpret_cast<const char*>(buffer), bytes_read);
+	ssize_t bytes = recv(client_fd, buffer, BUFFER_SIZE, 0);
+	if (bytes > 0) {
+		return std::string(reinterpret_cast<const char*>(buffer), bytes);
 	}
 	return "";
 }
 
-void Connection::updateStorage(ssize_t client_fd) {
+void Connection::updateStorage(int32_t client_fd) {
 	const std::string& command_list = commands_client[0];
-	const std::string& command_err = commands_server[4];
 	std::string response;
 	size_t pos_start;
 
 	sendToClient(client_fd, command_list);
 	response = receive(client_fd);
 	pos_start = response.find(start_marker);
-
 	if (pos_start == std::string::npos) {
 		std::cerr << "[-] Error: Failed to update storage." << std::endl;
-		sendToClient(client_fd, command_err);
 		return;
 	}
+	response.erase(pos_start, start_marker.length());
+
 	do {
-		if (response.empty()) {
-			continue;
-		}
-		response.erase(pos_start, start_marker.length());
 		std::istringstream iss(response);
 		std::string file_info;
 		std::string filename;
@@ -120,7 +105,6 @@ void Connection::updateStorage(ssize_t client_fd) {
 			std::istringstream file_stream(file_info);
 			std::getline(file_stream, filename, ':');
 			std::getline(file_stream, hash);
-
 			if (!filename.empty() && !hash.empty()) {
 				storeFile(client_fd, filename, hash);
 			}
@@ -129,81 +113,66 @@ void Connection::updateStorage(ssize_t client_fd) {
 			break;
 		}
 	} while (!(response = receive(client_fd)).empty());
-	eraseFilesWithSameHash();
+	updateFilesWithSameHash();
 }
 
-void Connection::sendToClient(ssize_t client_fd, const std::string& msg) {
-	send(client_fd, msg.c_str(), msg.size(), 0);
+void Connection::sendToClient(int32_t client_fd, const std::string& msg) {
+	ssize_t bytes = send(client_fd, msg.c_str(), msg.size(), 0);
+	if (bytes == -1) {
+		std::cerr << "[-] Error: Failed to send msg." << std::endl;
+	}
 }
 
-void Connection::sendFileList(ssize_t client_fd) {
-	std::vector<std::string> files = getFileList();
-	std::string list;
-
+void Connection::sendFileList(int32_t client_fd) {
+	std::vector<std::string> files = getFilesList();
+	std::string list = start_marker;
 	for (const auto& file : files) {
+		if (list.size() + file.size() > BUFFER_SIZE) {
+			sendToClient(client_fd, list);
+			list.clear();
+		}
 		list += file + ' ';
 	}
+	list += end_marker;
 	sendToClient(client_fd, list);
 }
 
-void Connection::sendFile(ssize_t client_fd, const std::string& filename) {
-	const std::string& error = commands_server[4];
-	std::unordered_map<ssize_t, FileInfo> files = findFilename(filename);
+void Connection::sendFile(int32_t client_fd, const std::string& filename) {
 
-	if (files.empty()) {
-		sendToClient(client_fd, error);
-	}
-	if (files.size() > 1) {
-
-	}
-
-	if (fd < 0) {
-		std::cerr << "[-] Error: Failed to send file: " << filename << '.' << std::endl;
-	}
-	ssize_t bytes = sendfile(client_fd,);
-
-	if (bytes == -1) {
-		std::cerr << "[-] Error: Failed to send file: " << filename << '.' << std::endl;
-		return;
-	}
-	std::cout << "[+] Success: File sent successfully: " << filename << '.' << std::endl;
 }
 
-std::vector<std::string> Connection::getFileList() {
-	std::vector<std::string> files;
-
+std::vector<std::string> Connection::getFilesList() {
+	std::vector<std::string> list;
 	for (const auto& entry : storage) {
-		files.push_back(entry.second.filename);
+		list.push_back(entry.second.filename);
 	}
-	return files;
+	return list;
 }
 
-std::unordered_map<ssize_t, FileInfo> Connection::findFilename(const std::string& filename) {
-	std::unordered_map<ssize_t, FileInfo> result;
-
+std::multimap<int32_t, FileInfo> Connection::findFilename(const std::string& filename) {
+	std::multimap<int32_t, FileInfo> result;
 	for (const auto& entry : storage) {
 		if (entry.second.filename == filename) {
-			result[entry.first] = entry.second;
+			result.insert(std::pair(entry.first, entry.second));
 		}
 	}
 	return result;
 }
 
-void Connection::eraseFilesWithSameHash() {
+void Connection::updateFilesWithSameHash() {
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
 			if (first->second.hash == second->second.hash) {
-				storage.erase(second->first);
+				first->second.filename = second->second.filename;
 				break;
 			}
 		}
 	}
 }
 
-void Connection::storeFile(ssize_t client_fd, const std::string& filename, const std::string& hash) {
+void Connection::storeFile(int32_t client_fd, const std::string& filename, const std::string& hash) {
 	FileInfo data {hash, filename};
-	storage[client_fd] = data;
-
+	storage.insert(std::pair(client_fd, data));
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }
 

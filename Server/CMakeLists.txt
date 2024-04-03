@@ -7,5 +7,5 @@ add_executable(
         server
         server.cpp
         Connection/connection.cpp
-        ThreadPool/threadPool.hpp
+        ThreadPool/threadpool.cpp
 )

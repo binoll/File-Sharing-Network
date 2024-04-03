@@ -4,11 +4,10 @@
 int32_t main() {
 	uint64_t port;
 
-	std::cout << "Write the port: ";
+	std::cout << "Write the server_port: ";
 	std::cin >> port;
 
 	Connection connection(port);
-
-	connection.createConnection();
+	connection.waitConnect();
 	return EXIT_SUCCESS;
 }

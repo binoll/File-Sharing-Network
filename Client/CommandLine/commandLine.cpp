@@ -21,7 +21,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		std::cout << "+------------------------------------------------+" << std::endl;
 		std::cout << "Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "Write the port: ";
+		std::cout << "Write the client_port: ";
 		std::cin >> port;
 
 		if (!this->connection.connectToServer(ip, port)) {
@@ -64,7 +64,7 @@ void CommandLine::run() {
 				std::cout << "List: " << std::endl;
 
 				for (auto& item : list) {
-					std::cout << "\t" << item;
+					std::cout << "\t" << item << std::endl;
 				}
 				std::cout << std::endl;
 				continue;
