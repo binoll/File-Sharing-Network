@@ -21,6 +21,6 @@
 
 #define BUFFER_SIZE 1024
 
-const std::vector<std::string> commands_client = {"list", "get", "exit"};
-const std::vector<std::string> commands_server = {"list", "get", "part", "exit"};
+const std::vector<std::string> commands_client = {"list", "get", "exit", "error"};
+const std::vector<std::string> commands_server = {"list", "get", "part", "exit", "error"};
 const std::vector<std::string> marker = {"start: ", ":end"};

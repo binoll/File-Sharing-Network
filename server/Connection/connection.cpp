@@ -93,6 +93,7 @@ std::string Connection::receive(ssize_t client_fd) {
 
 void Connection::updateStorage(ssize_t client_fd) {
 	const std::string& command_list = commands_client[0];
+	const std::string& command_err = commands_server[4];
 	std::string response;
 	size_t pos_start;
 
@@ -102,6 +103,7 @@ void Connection::updateStorage(ssize_t client_fd) {
 
 	if (pos_start == std::string::npos) {
 		std::cerr << "[-] Error: Failed to update storage." << std::endl;
+		sendToClient(client_fd, command_err);
 		return;
 	}
 	do {
@@ -124,9 +126,10 @@ void Connection::updateStorage(ssize_t client_fd) {
 			}
 		}
 		if (file_info == end_marker) {
-			return;
+			break;
 		}
 	} while (!(response = receive(client_fd)).empty());
+	eraseFilesWithSameHash();
 }
 
 void Connection::sendToClient(ssize_t client_fd, const std::string& msg) {
@@ -143,26 +146,23 @@ void Connection::sendFileList(ssize_t client_fd) {
 	sendToClient(client_fd, list);
 }
 
-void Connection::eraseFilesWithSameHash() {
-	for (auto it1 = storage.begin(); it1 != storage.end(); ++it1) {
-		for (auto it2 = std::next(it1); it2 != storage.end(); ++it2) {
-			if (it1->second.hash == it2->second.hash) {
-				storage.erase(it2->first);
-				break;
-			}
-		}
-	}
-}
-
 void Connection::sendFile(ssize_t client_fd, const std::string& filename) {
-	ssize_t fd = findFilename(filename);
+	const std::string& error = commands_server[4];
+	std::unordered_map<ssize_t, FileInfo> files = findFilename(filename);
+
+	if (files.empty()) {
+		sendToClient(client_fd, error);
+	}
+	if (files.size() > 1) {
+
+	}
 
 	if (fd < 0) {
 		std::cerr << "[-] Error: Failed to send file: " << filename << '.' << std::endl;
 	}
-	ssize_t bytes_sent = sendfile(client_fd, );
+	ssize_t bytes = sendfile(client_fd,);
 
-	if (bytes_sent == -1) {
+	if (bytes == -1) {
 		std::cerr << "[-] Error: Failed to send file: " << filename << '.' << std::endl;
 		return;
 	}
@@ -178,13 +178,26 @@ std::vector<std::string> Connection::getFileList() {
 	return files;
 }
 
-ssize_t Connection::findFilename(const std::string& filename) {
+std::unordered_map<ssize_t, FileInfo> Connection::findFilename(const std::string& filename) {
+	std::unordered_map<ssize_t, FileInfo> result;
+
 	for (const auto& entry : storage) {
 		if (entry.second.filename == filename) {
-			return entry.first;
+			result[entry.first] = entry.second;
 		}
 	}
-	return -1;
+	return result;
+}
+
+void Connection::eraseFilesWithSameHash() {
+	for (auto first = storage.begin(); first != storage.end(); ++first) {
+		for (auto second = std::next(first); second != storage.end(); ++second) {
+			if (first->second.hash == second->second.hash) {
+				storage.erase(second->first);
+				break;
+			}
+		}
+	}
 }
 
 void Connection::storeFile(ssize_t client_fd, const std::string& filename, const std::string& hash) {

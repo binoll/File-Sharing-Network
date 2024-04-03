@@ -28,13 +28,13 @@ class Connection {
 
 	std::vector<std::string> getFileList();
 
-	ssize_t findFilename(const std::string&);
+	std::unordered_map<ssize_t, FileInfo> findFilename(const std::string&);
+
+	void eraseFilesWithSameHash();
 
 	void storeFile(ssize_t, const std::string&, const std::string&);
 
 	void sendFileList(ssize_t);
-
-	void eraseFilesWithSameHash();
 
 	void split(const std::string&, char, std::vector<std::string>&);
 
