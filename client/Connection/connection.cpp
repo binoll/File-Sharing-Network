@@ -1,14 +1,16 @@
 #include "connection.hpp"
 
-Connection::Connection(const std::string& dir) : dir(std::move(dir)), server_address() {
-	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+#include <utility>
+
+Connection::Connection(std::string dir) : dir(std::move(dir)), server_address() {
+	if ((client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		std::cerr << "Error: Can not create socket" << std::endl;
 		return;
 	}
 }
 
 Connection::~Connection() {
-	close(fd);
+	close(client_fd);
 }
 
 bool Connection::connectToServer(const std::string& server_ip, size_t port) {
@@ -19,11 +21,11 @@ bool Connection::connectToServer(const std::string& server_ip, size_t port) {
 		std::cerr << "Error: Invalid address or address not supported" << std::endl;
 		return false;
 	}
-	if (connect(fd, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+	if (connect(client_fd, reinterpret_cast<struct sockaddr*>(&server_address), sizeof(server_address)) < 0) {
 		std::cerr << "Error: Can not Connection failed" << std::endl;
 		return false;
 	}
-	std::thread(&Connection::handleServer, this).join();
+	std::thread(&Connection::handleServer, this).detach();
 	return true;
 }
 
@@ -32,14 +34,13 @@ int8_t Connection::getFile(const std::string& filename) {
 	std::ofstream file(filename, std::ios::binary);
 	std::string response;
 
-	if (sendMsgToServer(reinterpret_cast<const std::byte*>(command.data()), command.size()) == -1) {
+	if (sendToServer(command) == -1) {
 		return -1;
 	}
 	if (!file.is_open()) {
 		std::cerr << "Error: Failed to open file for writing: " << filename << std::endl;
 		return -1;
 	}
-
 	response = receive();
 	size_t pos_start = response.find(start_marker);
 
@@ -49,7 +50,6 @@ int8_t Connection::getFile(const std::string& filename) {
 	}
 	do {
 		size_t pos_end = response.find(end_marker);
-
 		if (pos_end != std::string::npos) {
 			response.erase(pos_end, end_marker.length());
 			file << response;
@@ -63,21 +63,21 @@ int8_t Connection::getFile(const std::string& filename) {
 }
 
 std::list<std::string> Connection::getList() {
-	std::string command = commands_client[0];
+	std::string command_list = commands_client[0];
 	std::list<std::string> list;
 	std::string response;
 
-	if (sendMsgToServer(reinterpret_cast<const std::byte*>(command.data()), command.size()) == -1) {
+	if (sendToServer(command_list) == -1) {
 		return list;
 	}
-
 	response = receive();
 	size_t pos_start = response.find(start_marker);
 
-	if (pos_start != std::string::npos) {
-		response.erase(pos_start, start_marker.length());
+	if (pos_start == std::string::npos) {
 		return list;
 	}
+	response.erase(pos_start, start_marker.length());
+
 	do {
 		std::istringstream iss(response);
 		size_t pos_end = response.find(end_marker);
@@ -100,13 +100,13 @@ std::list<std::string> Connection::getList() {
 	return list;
 }
 
-std::list<std::string> Connection::filesList() {
+std::list<std::string> Connection::getFilesList() {
 	std::list<std::string> list;
 
 	try {
 		for (const auto& entry : std::filesystem::directory_iterator(dir)) {
 			if (std::filesystem::is_regular_file(entry)) {
-				list.push_back(entry.path().filename().string());
+				list.push_back(entry.path().filename());
 			}
 		}
 	} catch (const std::exception& err) {
@@ -118,17 +118,18 @@ std::list<std::string> Connection::filesList() {
 
 std::string Connection::receive() {
 	std::byte buffer[BUFFER_SIZE];
-	ssize_t bytesRead;
+	mutex.lock();
+	ssize_t bytes_read = recv(client_fd, buffer, BUFFER_SIZE, 0);
+	mutex.unlock();
 
-	if ((bytesRead = recv(fd, buffer, BUFFER_SIZE, 0)) > 0) {
-		return std::string(reinterpret_cast<char*>(buffer), bytesRead);
+	if (bytes_read > 0) {
+		return std::string(reinterpret_cast<const char*>(buffer), bytes_read);
 	}
 	return "";
 }
 
 int8_t Connection::sendListToServer(const std::list<std::string>& list) {
-	if (sendMsgToServer(reinterpret_cast<const std::byte*>(start_marker.data()),
-	                    start_marker.size()) == -1) {
+	if (sendToServer(start_marker) == -1) {
 		std::cerr << "Error: Failed to send the start marker of file list" << std::endl;
 		return -1;
 	}
@@ -138,13 +139,12 @@ int8_t Connection::sendListToServer(const std::list<std::string>& list) {
 		oss << filename << ':' << hash << ' ';
 		std::string file_info = oss.str();
 
-		if (sendMsgToServer(reinterpret_cast<const std::byte*>(file_info.data()), file_info.size()) == -1) {
+		if (sendToServer(file_info) == -1) {
 			std::cerr << "Error: Failed to send file info" << std::endl;
 			return -1;
 		}
 	}
-	if (sendMsgToServer(reinterpret_cast<const std::byte*>(end_marker.data()),
-	                    end_marker.size()) == -1) {
+	if (sendToServer(end_marker) == -1) {
 		std::cerr << "Error: Failed to send the end marker of file list" << std::endl;
 		return -1;
 	}
@@ -163,18 +163,19 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 	file.read(reinterpret_cast<char*>(buffer), size);
 	std::string msg(reinterpret_cast<const char*>(buffer), size);
 
-	if (send(fd, buffer, size, 0) == -1) {
-		std::cerr << "Error: Failed to send the file to server: " << filename << std::endl;
+	if (send(client_fd, buffer, size, 0) == -1) {
+		std::cerr << "[-] Error: Failed to send the file to server: " << filename << std::endl;
 		return -1;
 	}
 	return 0;
 }
 
-int8_t Connection::sendMsgToServer(const std::byte* buffer, size_t size) {
-	if (send(fd, reinterpret_cast<const char*>(buffer), size, 0) == -1) {
-		return -1;
+int8_t Connection::sendToServer(const std::string& msg) {
+	mutex.lock();
+	if (send(client_fd, msg.c_str(), msg.size(), 0) == -1) {
+		std::cerr << "[-] Error: Failed to send msg." << std::endl;
 	}
-	return 0;
+	mutex.unlock();
 }
 
 std::string Connection::calculateFileHash(const std::string& filename) {
@@ -202,9 +203,7 @@ void Connection::handleServer() {
 
 	while (!(command = receive()).empty()) {
 		if (command == command_list) {
-			mutex.lock();
-			std::list<std::string> file_list = filesList();
-			mutex.unlock();
+			std::list<std::string> file_list = getFilesList();
 			sendListToServer(file_list);
 		} else if (command.find(command_get) == 0) {
 			std::istringstream iss(command.substr(4));

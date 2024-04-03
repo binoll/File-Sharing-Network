@@ -54,14 +54,14 @@ void CommandLine::run() {
 				continue;
 			}
 			case 2: {
-				std::list<std::string> list = this->connection.getList();
+				std::list<std::string> list = connection.getList();
 
 				if (list.empty()) {
 					std::cout << "No clients available. Try again! [-]" << std::endl;
 					continue;
 				}
 
-				std::cout << "Commands storage: " << std::endl;
+				std::cout << "List: " << std::endl;
 
 				for (auto& item : list) {
 					std::cout << "\t" << item;

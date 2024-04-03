@@ -16,7 +16,7 @@
  */
 class Connection {
  public:
-	Connection(const std::string&);
+	explicit Connection(std::string);
 
 	~Connection();
 
@@ -27,7 +27,7 @@ class Connection {
 	std::list<std::string> getList();
 
  private:
-	std::list<std::string> filesList();
+	std::list<std::string> getFilesList();
 
 	std::string receive();
 
@@ -35,16 +35,16 @@ class Connection {
 
 	int8_t sendFileToServer(const std::string&, size_t, size_t);
 
-	int8_t sendMsgToServer(const std::byte*, size_t);
+	int8_t sendToServer(const std::string& msg);
 
 	std::string calculateFileHash(const std::string&);
 
 	void handleServer();
 
-	ssize_t server_fd;
+	int32_t client_fd;
 	struct sockaddr_in server_address;
-	std::mutex mutex;
 	std::string dir;
+	std::mutex mutex;
 	const std::string start_marker = marker[0];
 	const std::string end_marker = marker[1];
 };
