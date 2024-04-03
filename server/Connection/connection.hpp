@@ -22,11 +22,13 @@ class Connection {
 
 	void updateStorage(ssize_t);
 
-	void sendMsgToClient(ssize_t fd, const std::string& msg);
+	void sendToClient(ssize_t, const std::string&);
 
 	void sendFile(ssize_t, const std::string&);
 
 	std::vector<std::string> getFileList();
+
+	ssize_t findFilename(const std::string&);
 
 	void storeFile(ssize_t, const std::string&, const std::string&);
 
@@ -36,11 +38,10 @@ class Connection {
 
 	void split(const std::string&, char, std::vector<std::string>&);
 
-	ssize_t socket_fd;
+	ssize_t server_fd;
 	struct sockaddr_in addr;
 	size_t port;
 	std::unordered_map<ssize_t, FileInfo> storage;
-	std::unique_ptr<std::thread> client_thread;
 	const std::string start_marker = marker[0];
 	const std::string end_marker = marker[1];
 };

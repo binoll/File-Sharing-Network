@@ -1,14 +1,14 @@
 #include "connection.hpp"
 
 Connection::Connection(const std::string& dir) : dir(std::move(dir)), server_address() {
-	if ((socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		std::cerr << "Error: Can not create socket" << std::endl;
 		return;
 	}
 }
 
 Connection::~Connection() {
-	close(socket_fd);
+	close(fd);
 }
 
 bool Connection::connectToServer(const std::string& server_ip, size_t port) {
@@ -19,7 +19,7 @@ bool Connection::connectToServer(const std::string& server_ip, size_t port) {
 		std::cerr << "Error: Invalid address or address not supported" << std::endl;
 		return false;
 	}
-	if (connect(socket_fd, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+	if (connect(fd, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
 		std::cerr << "Error: Can not Connection failed" << std::endl;
 		return false;
 	}
@@ -120,7 +120,7 @@ std::string Connection::receive() {
 	std::byte buffer[BUFFER_SIZE];
 	ssize_t bytesRead;
 
-	if ((bytesRead = recv(socket_fd, buffer, BUFFER_SIZE, 0)) > 0) {
+	if ((bytesRead = recv(fd, buffer, BUFFER_SIZE, 0)) > 0) {
 		return std::string(reinterpret_cast<char*>(buffer), bytesRead);
 	}
 	return "";
@@ -163,7 +163,7 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 	file.read(reinterpret_cast<char*>(buffer), size);
 	std::string msg(reinterpret_cast<const char*>(buffer), size);
 
-	if (send(socket_fd, buffer, size, 0) == -1) {
+	if (send(fd, buffer, size, 0) == -1) {
 		std::cerr << "Error: Failed to send the file to server: " << filename << std::endl;
 		return -1;
 	}
@@ -171,7 +171,7 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 }
 
 int8_t Connection::sendMsgToServer(const std::byte* buffer, size_t size) {
-	if (send(socket_fd, reinterpret_cast<const char*>(buffer), size, 0) == -1) {
+	if (send(fd, reinterpret_cast<const char*>(buffer), size, 0) == -1) {
 		return -1;
 	}
 	return 0;

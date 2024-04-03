@@ -41,7 +41,7 @@ class Connection {
 
 	void handleServer();
 
-	ssize_t socket_fd;
+	ssize_t server_fd;
 	struct sockaddr_in server_address;
 	std::mutex mutex;
 	std::string dir;
