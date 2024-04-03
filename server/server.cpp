@@ -1,5 +1,5 @@
 #include "server.hpp"
-#include "Connection/connection.hpp"
+#include "connection/connection.hpp"
 
 int32_t main() {
 	uint64_t port;

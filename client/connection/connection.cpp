@@ -64,9 +64,16 @@ std::list<std::string> Connection::getList() {
 	return list;
 }
 
+int8_t Connection::exit() {
+	const std::string& command_list = commands_client[2];
+	if (sendToServer(command_list) < 0) {
+		return -1;
+	}
+	return 0;
+}
+
 std::list<std::string> Connection::listFiles() {
 	std::list<std::string> list;
-
 	try {
 		for (const auto& filename : std::filesystem::directory_iterator(dir)) {
 			if (std::filesystem::is_regular_file(filename)) {
@@ -82,11 +89,18 @@ std::list<std::string> Connection::listFiles() {
 
 std::string Connection::receive() {
 	std::byte buffer[BUFFER_SIZE];
-	ssize_t bytes = recv(client_fd, buffer, BUFFER_SIZE, 0);
-	if (bytes > 0) {
-		return std::string(reinterpret_cast<const char*>(buffer), bytes);
+	ssize_t bytes;
+	const std::string& command_err = commands_client[3];
+
+	while (true) {
+		bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_CONFIRM | MSG_WAITFORONE);
+		if (bytes > 0) {
+			return std::string(reinterpret_cast<char*>(buffer), bytes);
+		} else {
+			break;
+		}
 	}
-	return "";
+	return command_err;
 }
 
 int8_t Connection::sendListToServer(const std::list<std::string>& list) {
@@ -116,9 +130,9 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 
 }
 
-int8_t Connection::sendToServer(const std::string& msg) const {
-	if (send(client_fd, msg.c_str(), msg.size(), 0) < 0) {
-		std::cerr << "[-] Error: Failed to send msg." << std::endl;
+int8_t Connection::sendToServer(const std::string& command) const {
+	if (send(client_fd, command.c_str(), command.size(), MSG_CONFIRM | MSG_WAITFORONE) < 0) {
+		std::cerr << "[-] Error: Failed to send command." << std::endl;
 		return -1;
 	}
 	return 0;

@@ -6,6 +6,6 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(
         client
         client.cpp
-        CommandLine/commandLine.cpp
-        Connection/connection.cpp
+        commandline/commandline.cpp
+        connection/connection.cpp
 )

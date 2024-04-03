@@ -1,5 +1,6 @@
 #pragma once
 
+#include <condition_variable>
 #include <filesystem>
 #include <iostream>
 #include <cstring>
@@ -7,9 +8,11 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <thread>
 #include <regex>
 #include <mutex>
 #include <array>
+#include <queue>
 #include <list>
 
 #include <sys/poll.h>

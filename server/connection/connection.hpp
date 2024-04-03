@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../server.hpp"
-#include "../ThreadPool/threadpool.hpp"
 
 class Connection {
  public:
@@ -18,11 +17,11 @@ class Connection {
 
 	void updateStorage(int32_t);
 
-	void sendToClient(int32_t, const std::string&);
+	ssize_t sendToClient(int32_t, const std::string&);
 
 	void sendFile(int32_t, const std::string&);
 
-	std::vector<std::string> getFilesList();
+	std::vector<std::string> listFiles();
 
 	std::multimap<int32_t, FileInfo> findFilename(const std::string&);
 
@@ -37,8 +36,7 @@ class Connection {
 	int32_t server_fd;
 	uint16_t server_port;
 	struct sockaddr_in server_addr;
-	ThreadPool pool;
-	std::multimap<ssize_t, FileInfo> storage;
+	std::multimap<int32_t, FileInfo> storage;
 	const std::string start_marker = marker[0];
 	const std::string end_marker = marker[1];
 };

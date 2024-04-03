@@ -1,4 +1,4 @@
-#include "commandLine.hpp"
+#include "commandline.hpp"
 
 CommandLine::CommandLine(std::string& path) : connection(path) {
 	std::cout << "Welcome to file sharing app!" << std::endl;
@@ -28,7 +28,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 			std::cout << "[-] Try again!" << std::endl;
 			continue;
 		}
-		std::cout << "[+] The Connection is established" << std::endl;
+		std::cout << "[+] The connection is established" << std::endl;
 		break;
 	}
 }
@@ -95,6 +95,10 @@ void CommandLine::run() {
 }
 
 void CommandLine::exit() {
+	if (connection.exit() < 0) {
+		std::cout << "[-] Error: Failed to close connection." << std::endl;
+		return;
+	}
 	std::cout << "Goodbye!" << std::endl;
 }
 

@@ -3,15 +3,15 @@
 #include "../client.hpp"
 
 /*
- * Commands from the Server:
+ * Commands from the server:
  * 1. list - send storage of clients.
  * 2. get:size:filename - send the file.
  * 3. part:offset:size:filename - send part of the file.
  *
- *  Commands to Server:
+ *  Commands to server:
  *  1. listFiles (filename:[hash]) - send storage of clients.
  *  2. get:filename - download the file.
- *  3. exit - close Connection with Server.
+ *  3. exit - close connection with server.
  */
 class Connection {
  public:
@@ -25,16 +25,18 @@ class Connection {
 
 	std::list<std::string> getList();
 
+	int8_t exit();
+
  private:
 	std::list<std::string> listFiles();
 
 	std::string receive();
 
-	int8_t sendListToServer(const std::list<std::string>& list);
+	int8_t sendListToServer(const std::list<std::string>&);
 
 	int8_t sendFileToServer(const std::string&, size_t, size_t);
 
-	int8_t sendToServer(const std::string& msg) const;
+	int8_t sendToServer(const std::string&) const;
 
 	std::string calculateFileHash(const std::string&);
 

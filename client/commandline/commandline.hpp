@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../client.hpp"
-#include "../Connection/connection.hpp"
+#include "../connection/connection.hpp"
 
 class CommandLine {
  public:
@@ -12,7 +12,7 @@ class CommandLine {
 	void run();
 
  private:
-	static void exit();
+	void exit();
 
 	static void help();
 
