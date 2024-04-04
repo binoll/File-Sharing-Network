@@ -28,7 +28,7 @@ void Connection::waitConnect() {
 	std::cout << "[*] Wait: server is listening for connections..." << std::endl;
 	while (true) {
 		int32_t client_fd;
-		struct sockaddr_in client_addr;
+		struct sockaddr_in client_addr { };
 		socklen_t addr_len = sizeof(client_addr);
 
 		client_fd = accept(server_fd, reinterpret_cast<struct sockaddr*>(&client_addr), &addr_len);
@@ -38,6 +38,7 @@ void Connection::waitConnect() {
 
 		synchronizationStorage(client_fd);
 		std::thread(&Connection::handleClient, this, client_fd).detach();
+		break;
 	}
 }
 
@@ -69,14 +70,15 @@ void Connection::handleClient(int32_t client_fd) {
 std::string Connection::receive(int32_t client_fd) {
 	const std::string& command_err = commands_server[4];
 	std::byte buffer[BUFFER_SIZE];
+	std::string receive_data;
 	ssize_t bytes;
 
 	bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+	receive_data = std::string(reinterpret_cast<char*>(buffer), bytes);
 	if (bytes > 0) {
-		return std::string(reinterpret_cast<char*>(buffer), bytes);
-	} else {
-		return command_err;
+		return receive_data;
 	}
+	return command_err;
 }
 
 ssize_t Connection::sendToClient(int32_t client_fd, const std::string& command) {
@@ -90,8 +92,8 @@ ssize_t Connection::sendToClient(int32_t client_fd, const std::string& command) 
 }
 
 void Connection::synchronizationStorage(int32_t client_fd) {
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 	std::string response;
 	size_t pos_start;
 
@@ -130,8 +132,8 @@ bool Connection::checkConnection(int32_t client_fd) {
 }
 
 void Connection::sendFileList(int32_t client_fd) {
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 	std::vector<std::string> files = listFiles();
 	std::string list = start_marker;
 

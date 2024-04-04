@@ -13,13 +13,13 @@ class Connection {
  private:
 	void handleClient(int32_t);
 
-	std::string receive(int32_t);
+	static std::string receive(int32_t);
 
-	ssize_t sendToClient(int32_t, const std::string&);
+	static ssize_t sendToClient(int32_t, const std::string&);
 
 	void synchronizationStorage(int32_t);
 
-	bool checkConnection(int32_t);
+	static bool checkConnection(int32_t);
 
 	void sendFileList(int32_t);
 
@@ -35,11 +35,11 @@ class Connection {
 
 	void removeClientFiles(int32_t);
 
-	void split(const std::string&, char, std::vector<std::string>&);
+	static void split(const std::string&, char, std::vector<std::string>&);
 
-	int32_t server_fd;
-	uint16_t server_port;
-	struct sockaddr_in server_addr;
 	std::multimap<int32_t, FileInfo> storage;
+	struct sockaddr_in server_addr { };
+	int32_t server_fd { };
+	uint16_t server_port;
 	std::mutex mutex;
 };
