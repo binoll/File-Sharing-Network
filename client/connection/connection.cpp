@@ -15,19 +15,20 @@ Connection::~Connection() {
 bool Connection::connectToServer(const std::string& server_ip, uint16_t port) {
 	client_port = port;
 	client_addr.sin_family = AF_INET;
-	client_addr.sin_port = htons(port);
+	client_addr.sin_port = htons(client_port);
 
-	if (inet_pton(AF_INET, server_ip.c_str(), &client_addr.sin_addr) <= 0) {
+	if (inet_pton(AF_INET, server_ip.c_str(), &client_addr.sin_addr) < 0) {
 		std::cerr << "[-] Error: Invalid address or address not supported." << std::endl;
 		return false;
 	}
 	if (connect(client_fd, reinterpret_cast<struct sockaddr*>(&client_addr), sizeof(client_addr)) < 0) {
-		std::cerr << "[-] Error: Failed connect to server." << std::endl;
+		std::cerr << "[-] Error: Failed to connect to server with client_fd." << std::endl;
 		return false;
 	}
-	std::thread(&Connection::handleServer, this).detach();
+	sendListToServer();
 	return true;
 }
+
 
 int8_t Connection::getFile(const std::string& filename) {
 
@@ -35,6 +36,8 @@ int8_t Connection::getFile(const std::string& filename) {
 
 std::list<std::string> Connection::getList() {
 	const std::string& command_list = commands_client[0];
+	const std::string start_marker = marker[0];
+	const std::string end_marker = marker[1];
 	std::list<std::string> list;
 	std::string response;
 	size_t pos_start;
@@ -52,7 +55,6 @@ std::list<std::string> Connection::getList() {
 	do {
 		std::istringstream iss(response);
 		std::string filename;
-		std::string hash;
 
 		while (std::getline(iss, filename, ' ') && filename != end_marker) {
 			list.emplace_back(filename);
@@ -65,46 +67,64 @@ std::list<std::string> Connection::getList() {
 }
 
 int8_t Connection::exit() {
-	const std::string& command_list = commands_client[2];
-	if (sendToServer(command_list) < 0) {
-		return -1;
+	const std::string& command_exit = commands_client[2];
+	return sendToServer(command_exit);
+}
+
+void Connection::responseToServer() {
+	struct timeval timeout;
+	fd_set readfds;
+
+	FD_ZERO(&readfds);
+	FD_SET(client_fd, &readfds);
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+
+	int32_t ready = select(client_fd + 1, &readfds, nullptr, nullptr, &timeout);
+	if (ready != -1 && ready != 0) {
+		handleServer();
 	}
-	return 0;
 }
 
 std::list<std::string> Connection::listFiles() {
 	std::list<std::string> list;
+
 	try {
-		for (const auto& filename : std::filesystem::directory_iterator(dir)) {
-			if (std::filesystem::is_regular_file(filename)) {
-				list.push_back(filename.path().filename());
+		std::filesystem::directory_iterator iterator(dir);
+		for (const auto& entry : iterator) {
+			if (std::filesystem::is_regular_file(entry)) {
+				list.push_back(entry.path().filename().string());
 			}
 		}
 	} catch (const std::exception& err) {
 		std::cerr << "[-] Error: " << err.what() << std::endl;
-		return list;
 	}
 	return list;
 }
 
-std::string Connection::receive() {
+std::string Connection::receive() const {
 	std::byte buffer[BUFFER_SIZE];
+	std::string received_data;
 	ssize_t bytes;
-	const std::string& command_err = commands_client[3];
 
-	while (true) {
-		bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_CONFIRM | MSG_WAITFORONE);
+	do {
+		bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
 		if (bytes > 0) {
-			return std::string(reinterpret_cast<char*>(buffer), bytes);
-		} else {
-			break;
+			received_data.append(reinterpret_cast<char*>(buffer), bytes);
+		} else if (bytes < 0) {
+			std::cerr << "[-] Error: Failed to receive data from server." << std::endl;
+			return "";
 		}
-	}
-	return command_err;
+	} while (bytes == BUFFER_SIZE);
+
+	return received_data;
 }
 
-int8_t Connection::sendListToServer(const std::list<std::string>& list) {
+int8_t Connection::sendListToServer() {
+	const std::string start_marker = marker[0];
+	const std::string end_marker = marker[1];
 	std::string file_info = start_marker;
+	std::list<std::string> list = listFiles();
 
 	for (const auto& filename : list) {
 		if (file_info.size() + filename.size() > BUFFER_SIZE) {
@@ -117,10 +137,7 @@ int8_t Connection::sendListToServer(const std::list<std::string>& list) {
 		oss << filename << ':' << hash << ' ';
 		file_info += oss.str();
 	}
-	if (sendToServer(file_info) < 0) {
-		return -1;
-	}
-	if (sendToServer(end_marker) < 0) {
+	if (sendToServer(file_info) < 0 || sendToServer(end_marker) < 0) {
 		return -1;
 	}
 	return 0;
@@ -130,12 +147,19 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 
 }
 
-int8_t Connection::sendToServer(const std::string& command) const {
-	if (send(client_fd, command.c_str(), command.size(), MSG_CONFIRM | MSG_WAITFORONE) < 0) {
+int8_t Connection::sendToServer(const std::string& command) {
+	ssize_t bytes;
+
+	bytes = send(client_fd, command.c_str(), command.size(), MSG_CONFIRM);
+	if (bytes < 0) {
 		std::cerr << "[-] Error: Failed to send command." << std::endl;
 		return -1;
 	}
 	return 0;
+}
+
+bool Connection::checkConnection() {
+	return getsockopt(client_fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
 }
 
 std::string Connection::calculateFileHash(const std::string& filename) {
@@ -161,11 +185,12 @@ void Connection::handleServer() {
 	const std::string& command_part = commands_server[2] + ':';
 	const std::string& command_exit = commands_server[3];
 
-	while (!(command = receive()).empty()) {
+	while (checkConnection() == 0) {
+		command = receive();
+
 		if (command == command_list) {
-			std::list<std::string> file_list = listFiles();
-			sendListToServer(file_list);
-		} else if (command.find(command_get) == 0) {
+			sendListToServer();
+		} else if (command == command_get) {
 			size_t colon1 = command.find(':', 4);
 			size_t colon2 = command.find(':', colon1 + 1);
 			size_t colon3 = command.find(':', colon2 + 1);
@@ -179,7 +204,7 @@ void Connection::handleServer() {
 			} else {
 				std::cerr << "[-] Error: Invalid command format." << std::endl;
 			}
-		} else if (command.find(command_part) == 0) {
+		} else if (command == command_part) {
 			std::istringstream iss(command.substr(5));
 			size_t colon1 = command.find(':', 5);
 			size_t colon2 = command.find(':', colon1 + 1);
@@ -200,7 +225,7 @@ void Connection::handleServer() {
 				file.read(reinterpret_cast<char*>(buffer.data()), size);
 				sendFileToServer(filename, offset, size);
 			}
-		} else if (command.find(command_exit) == 0) {
+		} else if (command == command_exit) {
 			break;
 		}
 	}

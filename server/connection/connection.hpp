@@ -15,9 +15,13 @@ class Connection {
 
 	std::string receive(int32_t);
 
-	void updateStorage(int32_t);
-
 	ssize_t sendToClient(int32_t, const std::string&);
+
+	void synchronizationStorage(int32_t);
+
+	bool checkConnection(int32_t);
+
+	void sendFileList(int32_t);
 
 	void sendFile(int32_t, const std::string&);
 
@@ -27,9 +31,9 @@ class Connection {
 
 	void updateFilesWithSameHash();
 
-	void storeFile(int32_t, const std::string&, const std::string&);
+	void storeClientFiles(int32_t, const std::string&, const std::string&);
 
-	void sendFileList(int32_t);
+	void removeClientFiles(int32_t);
 
 	void split(const std::string&, char, std::vector<std::string>&);
 
@@ -37,6 +41,5 @@ class Connection {
 	uint16_t server_port;
 	struct sockaddr_in server_addr;
 	std::multimap<int32_t, FileInfo> storage;
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	std::mutex mutex;
 };

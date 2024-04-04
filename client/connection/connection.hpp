@@ -27,16 +27,20 @@ class Connection {
 
 	int8_t exit();
 
+	void responseToServer();
+	
  private:
 	std::list<std::string> listFiles();
 
-	std::string receive();
+	std::string receive() const;
 
-	int8_t sendListToServer(const std::list<std::string>&);
+	int8_t sendListToServer();
 
 	int8_t sendFileToServer(const std::string&, size_t, size_t);
 
-	int8_t sendToServer(const std::string&) const;
+	int8_t sendToServer(const std::string&);
+
+	bool checkConnection();
 
 	std::string calculateFileHash(const std::string&);
 
@@ -44,8 +48,6 @@ class Connection {
 
 	std::string dir;
 	int32_t client_fd;
-	uint16_t client_port;
-	struct sockaddr_in client_addr;
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	uint16_t client_port { };
+	struct sockaddr_in client_addr { };
 };

@@ -4,31 +4,19 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 	std::cout << "Welcome to file sharing app!" << std::endl;
 
 	while (true) {
-		std::string work_path;
-
-		std::cout << "+------------------------------------------------+" << std::endl;
-		std::cout << "Write the dir: ";
-		std::cin >> work_path;
-
-		std::cout << "[+] Dir is correct" << std::endl;
-		break;
-	}
-
-	while (true) {
 		std::string ip;
-		uint64_t port;
+		uint16_t port;
 
-		std::cout << "+------------------------------------------------+" << std::endl;
-		std::cout << "Write the ip-address: ";
+		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "Write the client_port: ";
+		std::cout << "[*] Write the client_port: ";
 		std::cin >> port;
 
 		if (!this->connection.connectToServer(ip, port)) {
-			std::cout << "[-] Try again!" << std::endl;
+			std::cout << "[-] Try again." << std::endl;
 			continue;
 		}
-		std::cout << "[+] The connection is established" << std::endl;
+		std::cout << "[+] The connection is established." << std::endl;
 		break;
 	}
 }
@@ -38,12 +26,11 @@ void CommandLine::run() {
 	int8_t choice;
 
 	while (true) {
-		std::cout << "+------------------------------------------------+" << std::endl;
-		std::cout << "Write the command (for help - \"help\"): ";
+		connection.responseToServer();
+		std::cout << "[*] Write the command (for help - \"help\"): ";
 		std::cin >> command;
 
 		choice = processing_command(command);
-
 		switch (choice) {
 			case 0: {
 				exit();
@@ -60,9 +47,7 @@ void CommandLine::run() {
 					std::cout << "No clients available. Try again! [-]" << std::endl;
 					continue;
 				}
-
 				std::cout << "List: " << std::endl;
-
 				for (auto& item : list) {
 					std::cout << "\t" << item << std::endl;
 				}
@@ -74,12 +59,10 @@ void CommandLine::run() {
 
 				std::cout << "Write the name of the file: ";
 				std::cin >> filename;
-
 				if (filename.empty()) {
 					std::cout << "The name of the file is empty. Try again! [-]" << std::endl;
 					continue;
 				}
-
 				if (this->connection.getFile(filename) == -1) {
 					std::cout << "Try again! [-]" << std::endl;
 				}
