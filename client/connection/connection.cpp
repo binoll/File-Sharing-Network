@@ -36,8 +36,8 @@ int8_t Connection::getFile(const std::string& filename) {
 
 std::list<std::string> Connection::getList() {
 	const std::string& command_list = commands_client[0];
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 	std::list<std::string> list;
 	std::string response;
 	size_t pos_start;
@@ -72,7 +72,7 @@ int8_t Connection::exit() {
 }
 
 void Connection::responseToServer() {
-	struct timeval timeout;
+	struct timeval timeout { };
 	fd_set readfds;
 
 	FD_ZERO(&readfds);
@@ -121,8 +121,8 @@ std::string Connection::receive() const {
 }
 
 int8_t Connection::sendListToServer() {
-	const std::string start_marker = marker[0];
-	const std::string end_marker = marker[1];
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 	std::string file_info = start_marker;
 	std::list<std::string> list = listFiles();
 
@@ -147,7 +147,7 @@ int8_t Connection::sendFileToServer(const std::string& filename, size_t size, si
 
 }
 
-int8_t Connection::sendToServer(const std::string& command) {
+int8_t Connection::sendToServer(const std::string& command) const {
 	ssize_t bytes;
 
 	bytes = send(client_fd, command.c_str(), command.size(), MSG_CONFIRM);
@@ -158,7 +158,7 @@ int8_t Connection::sendToServer(const std::string& command) {
 	return 0;
 }
 
-bool Connection::checkConnection() {
+bool Connection::checkConnection() const {
 	return getsockopt(client_fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
 }
 
@@ -211,8 +211,9 @@ void Connection::handleServer() {
 			size_t colon3 = command.find(':', colon2 + 1);
 
 			if (colon1 != std::string::npos && colon2 != std::string::npos && colon3 != std::string::npos) {
-				size_t offset = std::stoull(command.substr(5, colon1 - 5));
-				size_t size = std::stoull(command.substr(colon1 + 1, colon2 - colon1 - 1));
+				off_t offset = static_cast<off_t>(std::stoull(command.substr(5, colon1 - 5)));
+				std::streamsize size = static_cast<std::streamsize>(std::stoull(
+						command.substr(colon1 + 1, colon2 - colon1 - 1)));
 				std::string filename = command.substr(colon3 + 1);
 				std::ifstream file(filename, std::ios::binary);
 				std::vector<std::byte> buffer(size);

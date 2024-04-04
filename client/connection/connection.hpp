@@ -38,11 +38,11 @@ class Connection {
 
 	int8_t sendFileToServer(const std::string&, size_t, size_t);
 
-	int8_t sendToServer(const std::string&);
+	int8_t sendToServer(const std::string&) const;
 
-	bool checkConnection();
+	bool checkConnection() const;
 
-	std::string calculateFileHash(const std::string&);
+	static std::string calculateFileHash(const std::string&);
 
 	void handleServer();
 
