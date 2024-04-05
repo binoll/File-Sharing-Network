@@ -32,9 +32,9 @@ class Connection {
  private:
 	static int32_t findFreePort();
 
-	[[nodiscard]] static int64_t sendToServer(int32_t, const std::string&) ;
+	[[nodiscard]] static int64_t sendToServer(int32_t, const std::string&);
 
-	[[nodiscard]] static std::string receive(int32_t) ;
+	[[nodiscard]] static std::string receive(int32_t);
 
 	std::list<std::string> listFiles();
 
@@ -49,12 +49,12 @@ class Connection {
 	void handleServer();
 
 	std::string dir;
-	int32_t passive_fd = -1;
-	int32_t active_fd = -1;
-	int32_t receive_port = -1;
-	int32_t send_port = -1;
-	struct sockaddr_in send_addr { };
-	struct sockaddr_in receive_addr { };
+	int32_t server_fd = -1;
+	int32_t client_fd = -1;
+	int32_t server_port = -1;
+	int32_t client_port = -1;
+	struct sockaddr_in client_addr { };
+	struct sockaddr_in server_addr { };
 	std::thread thread;
 	std::mutex mutex;
 };

@@ -9,7 +9,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "[*] Write the send_port: ";
+		std::cout << "[*] Write the port: ";
 		std::cin >> port;
 		if (!connection.connectToServer(ip, port)) {
 			std::cout << "[-] Error: Failed connect to the server. Try again!" << std::endl;

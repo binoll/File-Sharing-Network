@@ -11,7 +11,7 @@ class Connection {
 	void waitConnect();
 
  private:
-	void handleClient(int32_t);
+	void handleClients(int32_t);
 
 	static std::string receive(int32_t);
 

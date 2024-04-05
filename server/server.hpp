@@ -8,4 +8,3 @@ struct FileInfo {
 	std::string hash;
 	std::string filename;
 };
-

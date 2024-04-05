@@ -1,9 +1,9 @@
 #include "connection.hpp"
 
 Connection::Connection(std::string dir) : dir(std::move(dir)) {
-	active_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	passive_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (passive_fd < 0 || active_fd < 0) {
+	client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (server_fd < 0 || client_fd < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
 	}
 }
@@ -12,50 +12,50 @@ Connection::~Connection() {
 	if (thread.joinable()) {
 		thread.join();
 	}
-	close(active_fd);
-	close(passive_fd);
+	close(client_fd);
+	close(server_fd);
 }
 
 bool Connection::connectToServer(const std::string& server_ip, int32_t port) {
-	active_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (active_fd < 0) {
+	client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (client_fd < 0) {
 		std::cerr << "[-] Error: Failed create send socket." << std::endl;
 		return false;
 	}
 
-	send_port = port;
-	send_addr.sin_family = AF_INET;
-	send_addr.sin_port = htons(send_port);
+	client_port = port;
+	client_addr.sin_family = AF_INET;
+	client_addr.sin_port = htons(client_port);
 
-	if (inet_pton(AF_INET, server_ip.c_str(), &send_addr.sin_addr) < 0) {
+	if (inet_pton(AF_INET, server_ip.c_str(), &client_addr.sin_addr) < 0) {
 		std::cerr << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	if (connect(active_fd, reinterpret_cast<struct sockaddr*>(&send_addr), sizeof(send_addr)) < 0) {
+	if (connect(client_fd, reinterpret_cast<struct sockaddr*>(&client_addr), sizeof(client_addr)) < 0) {
 		std::cerr << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
 	}
 
-	passive_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (passive_fd < 0) {
+	server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (server_fd < 0) {
 		std::cerr << "[-] Error: Failed create receive socket." << std::endl;
 		return false;
 	}
 
-	receive_port = findFreePort();
-	receive_addr.sin_family = AF_INET;
-	receive_addr.sin_port = htons(receive_port);
-	receive_addr.sin_addr.s_addr = INADDR_ANY;
+	server_port = findFreePort();
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_port = htons(server_port);
+	server_addr.sin_addr.s_addr = INADDR_ANY;
 
-	if (bind(passive_fd, reinterpret_cast<struct sockaddr*>(&receive_addr), sizeof(receive_addr)) < 0) {
+	if (bind(server_fd, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
 		std::cerr << "[-] Error: Failed bind receive socket." << std::endl;
 		return false;
 	}
-	if (connect(passive_fd, reinterpret_cast<struct sockaddr*>(&receive_addr), sizeof(receive_addr)) < 0) {
+	if (connect(server_fd, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
 		std::cerr << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
 	}
-	sendListToServer(active_fd);
+	sendListToServer(client_fd);
 	thread = std::thread(&Connection::handleServer, this);
 	thread.detach();
 	return true;
@@ -73,10 +73,10 @@ std::list<std::string> Connection::getList() const {
 	std::string response;
 	uint64_t pos_start;
 
-	if (sendToServer(active_fd, command_list) < 0) {
+	if (sendToServer(client_fd, command_list) < 0) {
 		return list;
 	}
-	response = receive(active_fd);
+	response = receive(client_fd);
 	pos_start = response.find(start_marker);
 	if (pos_start == std::string::npos) {
 		return list;
@@ -93,17 +93,17 @@ std::list<std::string> Connection::getList() const {
 		if (filename == end_marker) {
 			break;
 		}
-	} while (!(response = receive(active_fd)).empty());
+	} while (!(response = receive(client_fd)).empty());
 	return list;
 }
 
 bool Connection::exit() const {
 	const std::string& command_exit = commands_client[2];
-	return sendToServer(active_fd, command_exit) > 0 && sendToServer(active_fd, command_exit) > 0;
+	return sendToServer(server_fd, command_exit) > 0 && sendToServer(client_fd, command_exit) > 0;
 }
 
 bool Connection::isConnect() const {
-	return checkConnection(passive_fd) && checkConnection(active_fd);
+	return checkConnection(server_fd) && checkConnection(client_fd);
 }
 
 int32_t Connection::findFreePort() {
@@ -241,10 +241,10 @@ void Connection::handleServer() {
 	const std::string& command_exit = commands_server[3];
 
 	while (isConnect()) {
-		command = receive(passive_fd);
+		command = receive(server_fd);
 
 		if (command == command_list) {
-			sendListToServer(passive_fd);
+			sendListToServer(server_fd);
 		} else if (command == command_get) {
 			uint64_t colon1 = command.find(':', 4);
 			uint64_t colon2 = command.find(':', colon1 + 1);
@@ -255,7 +255,7 @@ void Connection::handleServer() {
 				uint64_t offset = std::stoull(command.substr(colon1 + 1, colon2 - colon1 - 1));
 				std::string filename = command.substr(colon3 + 1);
 
-				sendFileToServer(passive_fd, filename, size, offset);
+				sendFileToServer(server_fd, filename, size, offset);
 			} else {
 				std::cerr << "[-] Error: Invalid command format." << std::endl;
 			}
@@ -279,7 +279,7 @@ void Connection::handleServer() {
 				}
 				file.seekg(offset);
 				file.read(reinterpret_cast<char*>(buffer.data()), size);
-				sendFileToServer(passive_fd, filename, offset, size);
+				sendFileToServer(server_fd, filename, offset, size);
 			}
 		} else if (command == command_exit) {
 			break;
