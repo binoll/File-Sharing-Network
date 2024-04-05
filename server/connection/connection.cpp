@@ -38,7 +38,6 @@ void Connection::waitConnect() {
 
 		synchronizationStorage(client_fd);
 		std::thread(&Connection::handleClient, this, client_fd).detach();
-		break;
 	}
 }
 
