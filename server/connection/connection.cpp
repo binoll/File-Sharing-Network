@@ -1,6 +1,6 @@
 #include "connection.hpp"
 
-Connection::Connection(uint16_t port) : server_port(port) {
+Connection::Connection(int32_t port) : server_port(port) {
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	server_addr.sin_port = htons(server_port);
@@ -41,38 +41,38 @@ void Connection::waitConnect() {
 	}
 }
 
-void Connection::handleClient(int32_t client_fd) {
+void Connection::handleClient(int32_t fd) {
 	std::string command;
 	const std::string& command_list = commands_client[0];
 	const std::string& command_get = commands_client[1] + ':';
 	const std::string& command_exit = commands_client[2];
 
-	while (checkConnection(client_fd) > 0) {
-		command = receive(client_fd);
+	while (checkConnection(fd) > 0) {
+		command = receive(fd);
 
 		if (command == command_list) {
-			sendFileList(client_fd);
+			sendFileList(fd);
 		} else if (command == command_get) {
 			std::vector<std::string> tokens;
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
-			sendFile(client_fd, filename);
+			sendFile(fd, filename);
 		} else if (command == command_exit) {
-			close(client_fd);
+			close(fd);
 			std::cout << "[+] Success: Client disconnected." << std::endl;
 			break;
 		}
 	}
-	removeClientFiles(client_fd);
+	removeClientFiles(fd);
 }
 
-std::string Connection::receive(int32_t client_fd) {
+std::string Connection::receive(int32_t fd) {
 	const std::string& command_err = commands_server[4];
 	std::byte buffer[BUFFER_SIZE];
 	std::string receive_data;
 	ssize_t bytes;
 
-	bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+	bytes = recv(fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
 	receive_data = std::string(reinterpret_cast<char*>(buffer), bytes);
 	if (bytes > 0) {
 		return receive_data;
@@ -80,23 +80,23 @@ std::string Connection::receive(int32_t client_fd) {
 	return command_err;
 }
 
-ssize_t Connection::sendToClient(int32_t client_fd, const std::string& command) {
+ssize_t Connection::sendToClient(int32_t fd, const std::string& command) {
 	ssize_t bytes;
 
-	bytes = send(client_fd, command.c_str(), command.size(), MSG_CONFIRM);
+	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
 	if (bytes == -1) {
 		std::cerr << "[-] Error: Failed to send command." << std::endl;
 	}
 	return bytes;
 }
 
-void Connection::synchronizationStorage(int32_t client_fd) {
+void Connection::synchronizationStorage(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	std::string response;
 	size_t pos_start;
 
-	response = receive(client_fd);
+	response = receive(fd);
 	pos_start = response.find(start_marker);
 
 	if (pos_start == std::string::npos) {
@@ -116,21 +116,21 @@ void Connection::synchronizationStorage(int32_t client_fd) {
 			std::getline(file_stream, filename, ':');
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
-				storeClientFiles(client_fd, filename, hash);
+				storeClientFiles(fd, filename, hash);
 			}
 		}
 		if (file_info == end_marker) {
 			break;
 		}
-	} while (!(response = receive(client_fd)).empty());
+	} while (!(response = receive(fd)).empty());
 	updateFilesWithSameHash();
 }
 
-bool Connection::checkConnection(int32_t client_fd) {
-	return getsockopt(client_fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
+bool Connection::checkConnection(int32_t fd) {
+	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
 }
 
-void Connection::sendFileList(int32_t client_fd) {
+void Connection::sendFileList(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	std::vector<std::string> files = listFiles();
@@ -138,22 +138,22 @@ void Connection::sendFileList(int32_t client_fd) {
 
 	for (const auto& file : files) {
 		if (list.size() + file.size() > BUFFER_SIZE) {
-			sendToClient(client_fd, list);
+			sendToClient(fd, list);
 			list.clear();
 		}
 		list += file + ' ';
 	}
-	sendToClient(client_fd, list);
-	sendToClient(client_fd, end_marker);
+	sendToClient(fd, list);
+	sendToClient(fd, end_marker);
 }
 
-void Connection::sendFile(int32_t client_fd, const std::string& filename) {
+void Connection::sendFile(int32_t fd, const std::string& filename) {
 
 }
 
 std::vector<std::string> Connection::listFiles() {
-	std::vector<std::string> list;
 	std::lock_guard<std::mutex> lock(mutex);
+	std::vector<std::string> list;
 
 	for (const auto& entry : storage) {
 		list.push_back(entry.second.filename);
@@ -162,8 +162,8 @@ std::vector<std::string> Connection::listFiles() {
 }
 
 std::multimap<int32_t, FileInfo> Connection::findFilename(const std::string& filename) {
-	std::multimap<int32_t, FileInfo> result;
 	std::lock_guard<std::mutex> lock(mutex);
+	std::multimap<int32_t, FileInfo> result;
 
 	for (const auto& entry : storage) {
 		if (entry.second.filename == filename) {
@@ -186,20 +186,20 @@ void Connection::updateFilesWithSameHash() {
 	}
 }
 
-void Connection::storeClientFiles(int32_t client_fd, const std::string& filename, const std::string& hash) {
-	FileInfo data {hash, filename};
+void Connection::storeClientFiles(int32_t fd, const std::string& filename, const std::string& hash) {
 	std::lock_guard<std::mutex> lock(mutex);
+	FileInfo data {hash, filename};
 
-	storage.insert(std::pair(client_fd, data));
+	storage.insert(std::pair(fd, data));
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }
 
-void Connection::removeClientFiles(int32_t client_fd) {
-	auto range = storage.equal_range(client_fd);
+void Connection::removeClientFiles(int32_t fd) {
 	std::lock_guard<std::mutex> lock(mutex);
+	auto range = storage.equal_range(fd);
 
 	storage.erase(range.first, range.second);
-	storage.erase(client_fd);
+	storage.erase(fd);
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {

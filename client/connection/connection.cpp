@@ -2,50 +2,81 @@
 
 Connection::Connection(std::string dir) : dir(std::move(dir)) {
 	client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if ((client_fd) < 0) {
+	listen_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (listen_fd < 0 || client_fd < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
-		return;
 	}
 }
 
 Connection::~Connection() {
+	if (listen_server.joinable()) {
+		listen_server.join();
+	}
 	close(client_fd);
+	close(listen_fd);
 }
 
-bool Connection::connectToServer(const std::string& server_ip, uint16_t port) {
+bool Connection::connectToServer(const std::string& server_ip, int32_t port) {
+	client_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (client_fd < 0) {
+		std::cerr << "[-] Error: Failed to create client socket." << std::endl;
+		return false;
+	}
+
 	client_port = port;
 	client_addr.sin_family = AF_INET;
 	client_addr.sin_port = htons(client_port);
 
 	if (inet_pton(AF_INET, server_ip.c_str(), &client_addr.sin_addr) < 0) {
-		std::cerr << "[-] Error: Invalid address or address not supported." << std::endl;
+		std::cerr << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
 	if (connect(client_fd, reinterpret_cast<struct sockaddr*>(&client_addr), sizeof(client_addr)) < 0) {
-		std::cerr << "[-] Error: Failed to connect to server with client_fd." << std::endl;
+		std::cerr << "[-] Error: Failed to connect to the server." << std::endl;
 		return false;
 	}
-	sendListToServer();
+
+	listen_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (listen_fd < 0) {
+		std::cerr << "[-] Error: Failed to create listen socket." << std::endl;
+		return false;
+	}
+
+	listen_port = findFreePort();
+	listen_addr.sin_family = AF_INET;
+	listen_addr.sin_port = htons(listen_port);
+	listen_addr.sin_addr.s_addr = INADDR_ANY;
+
+	if (bind(listen_fd, reinterpret_cast<struct sockaddr*>(&listen_addr), sizeof(listen_addr)) < 0) {
+		std::cerr << "[-] Error: Failed to bind listen socket." << std::endl;
+		return false;
+	}
+	if (connect(listen_fd, reinterpret_cast<struct sockaddr*>(&client_addr), sizeof(client_addr)) < 0) {
+		std::cerr << "[-] Error: Failed to connect to the server for listening." << std::endl;
+		return false;
+	}
+	sendListToServer(client_fd);
+	listen_server = std::thread(&Connection::handleServer, this);
+	listen_server.detach();
 	return true;
 }
 
-
-int8_t Connection::getFile(const std::string& filename) {
+int64_t Connection::getFile(const std::string& filename) {
 
 }
 
-std::list<std::string> Connection::getList() {
+std::list<std::string> Connection::getList() const {
 	const std::string& command_list = commands_client[0];
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	std::list<std::string> list;
 	std::string response;
-	size_t pos_start;
+	uint64_t pos_start;
 
-	if (sendToServer(command_list) < 0) {
+	if (sendToServer(client_fd, command_list) < 0) {
 		return list;
 	}
-	response = receive();
+	response = receive(client_fd);
 	pos_start = response.find(start_marker);
 	if (pos_start == std::string::npos) {
 		return list;
@@ -62,31 +93,71 @@ std::list<std::string> Connection::getList() {
 		if (filename == end_marker) {
 			break;
 		}
-	} while (!(response = receive()).empty());
+	} while (!(response = receive(client_fd)).empty());
 	return list;
 }
 
-int8_t Connection::exit() {
+bool Connection::exit() const {
 	const std::string& command_exit = commands_client[2];
-	return sendToServer(command_exit);
+	return sendToServer(client_fd, command_exit) > 0;
 }
 
-void Connection::responseToServer() {
-	struct timeval timeout { };
-	fd_set readfds;
+int32_t Connection::findFreePort() {
+	sockaddr_in addr { };
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = 0;
 
-	FD_ZERO(&readfds);
-	FD_SET(client_fd, &readfds);
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 0;
-
-	int32_t ready = select(client_fd + 1, &readfds, nullptr, nullptr, &timeout);
-	if (ready != -1 && ready != 0) {
-		handleServer();
+	int32_t fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		std::cerr << "Failed to create socket" << std::endl;
+		return -1;
 	}
+	if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+		std::cerr << "[-] Error: Failed to bind socket" << std::endl;
+		close(fd);
+		return -1;
+	}
+	socklen_t addr_len = sizeof(addr);
+	if (getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &addr_len) < 0) {
+		std::cerr << "[-] Error: Failed to get socket name" << std::endl;
+		close(fd);
+		return -1;
+	}
+	int32_t port = ntohs(addr.sin_port);
+	close(fd);
+	return port;
+}
+
+int64_t Connection::sendToServer(int32_t fd, const std::string& command) {
+	int64_t bytes;
+
+	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
+	if (bytes < 0) {
+		std::cerr << "[-] Error: Failed send to the server." << std::endl;
+	}
+	return bytes;
+}
+
+std::string Connection::receive(int32_t fd) {
+	std::byte buffer[BUFFER_SIZE];
+	std::string received_data;
+	int64_t bytes;
+
+	do {
+		bytes = recv(fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+		if (bytes > 0) {
+			received_data.append(reinterpret_cast<char*>(buffer), bytes);
+		} else if (bytes < 0) {
+			std::cerr << "[-] Error: Failed to receive data from server." << std::endl;
+			return "";
+		}
+	} while (bytes == BUFFER_SIZE);
+	return received_data;
 }
 
 std::list<std::string> Connection::listFiles() {
+	std::lock_guard<std::mutex> lock(mutex);
 	std::list<std::string> list;
 
 	try {
@@ -102,67 +173,47 @@ std::list<std::string> Connection::listFiles() {
 	return list;
 }
 
-std::string Connection::receive() const {
-	std::byte buffer[BUFFER_SIZE];
-	std::string received_data;
-	ssize_t bytes;
-
-	do {
-		bytes = recv(client_fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
-		if (bytes > 0) {
-			received_data.append(reinterpret_cast<char*>(buffer), bytes);
-		} else if (bytes < 0) {
-			std::cerr << "[-] Error: Failed to receive data from server." << std::endl;
-			return "";
-		}
-	} while (bytes == BUFFER_SIZE);
-
-	return received_data;
+bool Connection::checkConnection(int32_t fd) {
+	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
 }
 
-int8_t Connection::sendListToServer() {
+int64_t Connection::sendListToServer(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	std::string file_info = start_marker;
 	std::list<std::string> list = listFiles();
+	int64_t sended_bytes = 0;
+	int64_t bytes = 0;
 
 	for (const auto& filename : list) {
 		if (file_info.size() + filename.size() > BUFFER_SIZE) {
-			if (sendToServer(file_info) < 0) {
+			if ((sended_bytes = sendToServer(fd, file_info)) < 0) {
 				return -1;
 			}
+			bytes += sended_bytes;
 		}
 		std::ostringstream oss;
 		std::string hash = calculateFileHash(filename);
 		oss << filename << ':' << hash << ' ';
 		file_info += oss.str();
 	}
-	if (sendToServer(file_info) < 0 || sendToServer(end_marker) < 0) {
+	if ((sended_bytes = sendToServer(fd, file_info)) < 0) {
 		return -1;
 	}
-	return 0;
-}
-
-int8_t Connection::sendFileToServer(const std::string& filename, size_t size, size_t offset) {
-
-}
-
-int8_t Connection::sendToServer(const std::string& command) const {
-	ssize_t bytes;
-
-	bytes = send(client_fd, command.c_str(), command.size(), MSG_CONFIRM);
-	if (bytes < 0) {
-		std::cerr << "[-] Error: Failed to send command." << std::endl;
+	bytes += sended_bytes;
+	if ((sended_bytes = sendToServer(fd, end_marker)) < 0) {
 		return -1;
 	}
-	return 0;
+	bytes += sended_bytes;
+	return bytes;
 }
 
-bool Connection::checkConnection() const {
-	return getsockopt(client_fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
+int64_t Connection::sendFileToServer(const std::string& filename, uint64_t size, uint64_t offset) {
+
 }
 
 std::string Connection::calculateFileHash(const std::string& filename) {
+	std::lock_guard<std::mutex> lock(mutex);
 	std::ifstream file(filename, std::ios::binary);
 	std::hash<std::string> hash_fn;
 	std::ostringstream oss;
@@ -185,11 +236,11 @@ void Connection::handleServer() {
 	const std::string& command_part = commands_server[2] + ':';
 	const std::string& command_exit = commands_server[3];
 
-	while (checkConnection() == 0) {
-		command = receive();
+	while (checkConnection(listen_fd) == 0) {
+		command = receive(listen_fd);
 
 		if (command == command_list) {
-			sendListToServer();
+			sendListToServer(listen_fd);
 		} else if (command == command_get) {
 			size_t colon1 = command.find(':', 4);
 			size_t colon2 = command.find(':', colon1 + 1);

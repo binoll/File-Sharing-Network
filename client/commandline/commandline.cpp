@@ -5,18 +5,17 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 	while (true) {
 		std::string ip;
-		uint16_t port;
+		int32_t port;
 
 		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
 		std::cout << "[*] Write the client_port: ";
 		std::cin >> port;
-
-		if (!this->connection.connectToServer(ip, port)) {
-			std::cout << "[-] Try again." << std::endl;
+		if (!connection.connectToServer(ip, port)) {
+			std::cout << "[-] Error: Failed connect to the server. Try again!" << std::endl;
 			continue;
 		}
-		std::cout << "[+] The connection is established." << std::endl;
+		std::cout << "[+] The connection is established: " << ip << ':' << port << '.' << std::endl;
 		break;
 	}
 }
@@ -26,7 +25,6 @@ void CommandLine::run() {
 	int8_t choice;
 
 	while (true) {
-		connection.responseToServer();
 		std::cout << "[*] Write the command (for help - \"help\"): ";
 		std::cin >> command;
 
@@ -44,10 +42,10 @@ void CommandLine::run() {
 				std::list<std::string> list = connection.getList();
 
 				if (list.empty()) {
-					std::cout << "No clients available. Try again! [-]" << std::endl;
+					std::cout << "[-] Error: No clients available. Try again!" << std::endl;
 					continue;
 				}
-				std::cout << "List: " << std::endl;
+				std::cout << "[+] Success. List: " << std::endl;
 				for (auto& item : list) {
 					std::cout << "\t" << item << std::endl;
 				}
@@ -57,19 +55,19 @@ void CommandLine::run() {
 			case 3: {
 				std::string filename;
 
-				std::cout << "Write the name of the file: ";
+				std::cout << "[*] Write the name of the file: ";
 				std::cin >> filename;
 				if (filename.empty()) {
-					std::cout << "The name of the file is empty. Try again! [-]" << std::endl;
+					std::cout << "[-] Error: The name of the file is empty. Try again!" << std::endl;
 					continue;
 				}
-				if (this->connection.getFile(filename) == -1) {
-					std::cout << "Try again! [-]" << std::endl;
+				if (connection.getFile(filename) < 0) {
+					std::cout << "[-] Error: Failed to download the file. Try again!" << std::endl;
 				}
 				continue;
 			}
 			default: {
-				std::cout << "This command does not exist! Try again! [-]" << std::endl;
+				std::cout << "[-] Error: This command does not exist. Try again!" << std::endl;
 				continue;
 			}
 		}
@@ -78,7 +76,7 @@ void CommandLine::run() {
 }
 
 void CommandLine::exit() {
-	if (connection.exit() < 0) {
+	if (!connection.exit()) {
 		std::cout << "[-] Error: Failed to close connection." << std::endl;
 		return;
 	}
@@ -97,14 +95,11 @@ int8_t CommandLine::processing_command(const std::string& command) {
 	int8_t index = -1;
 
 	if (command.empty()) { return -1; }
-
-	for (auto& item : this->commands) {
+	for (const auto& item : commands) {
 		++index;
-
 		if (command.find(item) == 0) {
 			return index;
 		}
 	}
-
 	return -1;
 }

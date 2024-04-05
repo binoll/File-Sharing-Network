@@ -4,7 +4,7 @@
 
 class Connection {
  public:
-	explicit Connection(uint16_t);
+	explicit Connection(int32_t);
 
 	~Connection();
 

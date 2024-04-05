@@ -19,35 +19,40 @@ class Connection {
 
 	~Connection();
 
-	bool connectToServer(const std::string&, uint16_t);
+	bool connectToServer(const std::string&, int32_t);
 
-	int8_t getFile(const std::string&);
+	int64_t getFile(const std::string&);
 
-	std::list<std::string> getList();
+	[[nodiscard]] std::list<std::string> getList() const;
 
-	int8_t exit();
+	[[nodiscard]] bool exit() const;
 
-	void responseToServer();
-	
  private:
+	static int32_t findFreePort();
+
+	static int64_t sendToServer(int32_t, const std::string&);
+
+	static std::string receive(int32_t);
+
 	std::list<std::string> listFiles();
 
-	std::string receive() const;
+	static bool checkConnection(int32_t);
 
-	int8_t sendListToServer();
+	int64_t sendListToServer(int32_t);
 
-	int8_t sendFileToServer(const std::string&, size_t, size_t);
+	int64_t sendFileToServer(const std::string&, uint64_t, uint64_t);
 
-	int8_t sendToServer(const std::string&) const;
-
-	bool checkConnection() const;
-
-	static std::string calculateFileHash(const std::string&);
+	std::string calculateFileHash(const std::string&);
 
 	void handleServer();
 
 	std::string dir;
-	int32_t client_fd;
-	uint16_t client_port { };
+	int32_t listen_fd = -1;
+	int32_t client_fd = -1;
+	int32_t listen_port = -1;
+	int32_t client_port = -1;
 	struct sockaddr_in client_addr { };
+	struct sockaddr_in listen_addr { };
+	std::thread listen_server;
+	std::mutex mutex;
 };
