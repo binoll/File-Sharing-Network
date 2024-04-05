@@ -35,8 +35,6 @@ void Connection::waitConnect() {
 		if (client_fd < 0) { continue; }
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr.sin_addr)
 				<< ':' << client_addr.sin_port << '.' << std::endl;
-
-		synchronizationStorage(client_fd);
 		std::thread(&Connection::handleClient, this, client_fd).detach();
 	}
 }
@@ -47,6 +45,7 @@ void Connection::handleClient(int32_t fd) {
 	const std::string& command_get = commands_client[1] + ':';
 	const std::string& command_exit = commands_client[2];
 
+	synchronizationStorage(fd);
 	while (checkConnection(fd) > 0) {
 		command = receive(fd);
 
