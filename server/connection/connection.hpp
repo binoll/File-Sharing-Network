@@ -15,7 +15,7 @@ class Connection {
 
 	static std::string receive(int32_t);
 
-	static ssize_t sendToClient(int32_t, const std::string&);
+	static int64_t sendToClient(int32_t, const std::string&);
 
 	void synchronizationStorage(int32_t);
 
@@ -40,6 +40,6 @@ class Connection {
 	std::multimap<int32_t, FileInfo> storage;
 	struct sockaddr_in server_addr { };
 	int32_t server_fd { };
-	uint16_t server_port;
+	int32_t server_port;
 	std::mutex mutex;
 };

@@ -69,7 +69,7 @@ std::string Connection::receive(int32_t fd) {
 	const std::string& command_err = commands_server[4];
 	std::byte buffer[BUFFER_SIZE];
 	std::string receive_data;
-	ssize_t bytes;
+	int64_t bytes;
 
 	bytes = recv(fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
 	receive_data = std::string(reinterpret_cast<char*>(buffer), bytes);
@@ -79,8 +79,8 @@ std::string Connection::receive(int32_t fd) {
 	return command_err;
 }
 
-ssize_t Connection::sendToClient(int32_t fd, const std::string& command) {
-	ssize_t bytes;
+int64_t Connection::sendToClient(int32_t fd, const std::string& command) {
+	int64_t bytes;
 
 	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
 	if (bytes == -1) {
@@ -93,7 +93,7 @@ void Connection::synchronizationStorage(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	std::string response;
-	size_t pos_start;
+	uint64_t pos_start;
 
 	response = receive(fd);
 	pos_start = response.find(start_marker);

@@ -223,7 +223,7 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 	}
 	oss << file.rdbuf();
 	std::string file_content = oss.str();
-	size_t hash_result = hash_fn(file_content);
+	uint64_t hash_result = hash_fn(file_content);
 	std::stringstream ss;
 	ss << std::hex << hash_result;
 	return ss.str();
@@ -242,13 +242,13 @@ void Connection::handleServer() {
 		if (command == command_list) {
 			sendListToServer(listen_fd);
 		} else if (command == command_get) {
-			size_t colon1 = command.find(':', 4);
-			size_t colon2 = command.find(':', colon1 + 1);
-			size_t colon3 = command.find(':', colon2 + 1);
+			uint64_t colon1 = command.find(':', 4);
+			uint64_t colon2 = command.find(':', colon1 + 1);
+			uint64_t colon3 = command.find(':', colon2 + 1);
 
 			if (colon1 != std::string::npos && colon2 != std::string::npos && colon3 != std::string::npos) {
-				size_t size = std::stoull(command.substr(4, colon1 - 4));
-				size_t offset = std::stoull(command.substr(colon1 + 1, colon2 - colon1 - 1));
+				uint64_t size = std::stoull(command.substr(4, colon1 - 4));
+				uint64_t offset = std::stoull(command.substr(colon1 + 1, colon2 - colon1 - 1));
 				std::string filename = command.substr(colon3 + 1);
 
 				sendFileToServer(filename, size, offset);
@@ -257,9 +257,9 @@ void Connection::handleServer() {
 			}
 		} else if (command == command_part) {
 			std::istringstream iss(command.substr(5));
-			size_t colon1 = command.find(':', 5);
-			size_t colon2 = command.find(':', colon1 + 1);
-			size_t colon3 = command.find(':', colon2 + 1);
+			uint64_t colon1 = command.find(':', 5);
+			uint64_t colon2 = command.find(':', colon1 + 1);
+			uint64_t colon3 = command.find(':', colon2 + 1);
 
 			if (colon1 != std::string::npos && colon2 != std::string::npos && colon3 != std::string::npos) {
 				off_t offset = static_cast<off_t>(std::stoull(command.substr(5, colon1 - 5)));
