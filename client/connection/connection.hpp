@@ -27,12 +27,14 @@ class Connection {
 
 	[[nodiscard]] bool exit() const;
 
+	[[nodiscard]] bool isConnect() const;
+
  private:
 	static int32_t findFreePort();
 
-	static int64_t sendToServer(int32_t, const std::string&);
+	[[nodiscard]] static int64_t sendToServer(int32_t, const std::string&) ;
 
-	static std::string receive(int32_t);
+	[[nodiscard]] static std::string receive(int32_t) ;
 
 	std::list<std::string> listFiles();
 
@@ -40,19 +42,19 @@ class Connection {
 
 	int64_t sendListToServer(int32_t);
 
-	int64_t sendFileToServer(const std::string&, uint64_t, uint64_t);
+	int64_t sendFileToServer(int32_t, const std::string&, uint64_t, uint64_t);
 
 	std::string calculateFileHash(const std::string&);
 
 	void handleServer();
 
 	std::string dir;
-	int32_t listen_fd = -1;
-	int32_t client_fd = -1;
-	int32_t listen_port = -1;
-	int32_t client_port = -1;
-	struct sockaddr_in client_addr { };
-	struct sockaddr_in listen_addr { };
-	std::thread listen_server;
+	int32_t passive_fd = -1;
+	int32_t active_fd = -1;
+	int32_t receive_port = -1;
+	int32_t send_port = -1;
+	struct sockaddr_in send_addr { };
+	struct sockaddr_in receive_addr { };
+	std::thread thread;
 	std::mutex mutex;
 };

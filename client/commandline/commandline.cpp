@@ -9,11 +9,11 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "[*] Write the client_port: ";
+		std::cout << "[*] Write the send_port: ";
 		std::cin >> port;
 		if (!connection.connectToServer(ip, port)) {
 			std::cout << "[-] Error: Failed connect to the server. Try again!" << std::endl;
-			continue;
+			return;
 		}
 		std::cout << "[+] The connection is established: " << ip << ':' << port << '.' << std::endl;
 		break;
@@ -21,10 +21,14 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 }
 
 void CommandLine::run() {
-	std::string command;
-	int8_t choice;
-
 	while (true) {
+		std::string command;
+		int8_t choice;
+
+		if (!connection.isConnect()) {
+			std::cout << "[-] Error: The server is not available." << std::endl;
+			break;
+		}
 		std::cout << "[*] Write the command (for help - \"help\"): ";
 		std::cin >> command;
 
@@ -77,7 +81,7 @@ void CommandLine::run() {
 
 void CommandLine::exit() {
 	if (!connection.exit()) {
-		std::cout << "[-] Error: Failed to close connection." << std::endl;
+		std::cout << "[-] Error: Failed to correctly close connection." << std::endl;
 		return;
 	}
 	std::cout << "Goodbye!" << std::endl;
