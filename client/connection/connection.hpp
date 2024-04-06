@@ -21,28 +21,30 @@ class Connection {
 
 	bool connectToServer(const std::string&, int32_t);
 
-	int64_t getFile(const std::string&) const;
+	[[nodiscard]] int64_t getFile(const std::string&) const;
 
 	[[nodiscard]] std::list<std::string> getList() const;
 
 	[[nodiscard]] bool exit() const;
 
-	[[nodiscard]] bool isConnect() const;
+	[[nodiscard]] bool isConnection() const;
 
  private:
 	static int32_t getPort();
 
-	static int64_t sendToServer(int32_t, const std::string&);
+	static int64_t sendData(int32_t, const std::string&);
 
-	[[nodiscard]] static std::string receive(int32_t);
+	[[nodiscard]] static std::string receiveData(int32_t);
 
 	std::list<std::string> getListFiles();
 
+	static uint64_t getFileSize(const std::string&);
+
 	static bool checkConnection(int32_t);
 
-	int64_t sendList(int32_t fd);
+	int64_t sendList(int32_t);
 
-	static int64_t sendFile(int32_t fd, const std::string& filename, int64_t offset, int64_t size);
+	static int64_t sendFile(int32_t, const std::string&, uint64_t, uint64_t);
 
 	std::string calculateFileHash(const std::string&);
 

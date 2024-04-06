@@ -10,7 +10,7 @@ Connection::~Connection() {
 	close(server_fd);
 }
 
-void Connection::waitConnect() {
+void Connection::waitConnection() {
 	server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (server_fd < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
@@ -35,30 +35,34 @@ void Connection::waitConnect() {
 		if (client_fd < 0) { continue; }
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr.sin_addr)
 				<< ':' << client_addr.sin_port << '.' << std::endl;
-		std::thread(&Connection::handleClients, this, client_fd).detach();
+		std::thread(&Connection::handleClients, this, client_fd, client_addr).detach();
 	}
 }
 
-void Connection::handleClients(int32_t fd) {
+bool Connection::isConnect(int32_t fd) const {
+	return checkConnection(server_fd) && checkConnection(fd);
+}
+
+void Connection::handleClients(int32_t fd, sockaddr_in addr) {
 	std::string command;
 	const std::string& command_list = commands_client[0];
 	const std::string& command_get = commands_client[1] + ':';
 	const std::string& command_exit = commands_client[2];
 
 	synchronizationStorage(fd);
-	while (checkConnection(fd) > 0) {
-		command = receive(fd);
+	while (isConnect(fd)) {
+		command = receiveData(fd);
 
 		if (command == command_list) {
-			sendFileList(fd);
-		} else if (command == command_get) {
+			sendListFiles(fd);
+		} else if (command.find(command_get) != std::string::npos) {
 			std::vector<std::string> tokens;
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
 			sendFile(fd, filename);
 		} else if (command == command_exit) {
-			close(fd);
-			std::cout << "[+] Success: Client disconnected." << std::endl;
+			std::cout << "[+] Success: Client disconnected: " << inet_ntoa(addr.sin_addr)
+					<< ':' << addr.sin_port << '.' << std::endl;
 			break;
 		}
 	}
@@ -66,21 +70,21 @@ void Connection::handleClients(int32_t fd) {
 	removeClientFiles(fd);
 }
 
-std::string Connection::receive(int32_t fd) {
-	const std::string& command_err = commands_server[4];
+std::string Connection::receiveData(int32_t fd) {
 	std::byte buffer[BUFFER_SIZE];
-	std::string receive_data;
 	int64_t bytes;
+	std::string receive_data;
+	const std::string& command_error = commands_server[4];
 
 	bytes = recv(fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
 	receive_data = std::string(reinterpret_cast<char*>(buffer), bytes);
 	if (bytes > 0) {
 		return receive_data;
 	}
-	return command_err;
+	return command_error;
 }
 
-int64_t Connection::sendToClient(int32_t fd, const std::string& command) {
+int64_t Connection::sendData(int32_t fd, const std::string& command) {
 	int64_t bytes;
 
 	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
@@ -96,62 +100,183 @@ void Connection::synchronizationStorage(int32_t fd) {
 	std::string response;
 	uint64_t pos_start;
 
-	response = receive(fd);
+	response = receiveData(fd);
 	pos_start = response.find(start_marker);
 
 	if (pos_start == std::string::npos) {
-		std::cerr << "[-] Error: Failed to update storage." << std::endl;
+		std::cerr << "[-] Error: Failed update storage." << std::endl;
 		return;
 	}
 	response.erase(pos_start, start_marker.length());
 
 	do {
 		std::istringstream iss(response);
-		std::string file_info;
+		std::string data;
 		std::string filename;
 		std::string hash;
+		uint64_t size;
 
-		while (std::getline(iss, file_info, ' ') && file_info != end_marker) {
-			std::istringstream file_stream(file_info);
+		while (std::getline(iss, data, ' ') && data != end_marker) {
+			std::istringstream file_stream(data);
 			std::getline(file_stream, filename, ':');
+			std::string size_str;
+			std::getline(file_stream, size_str, ':');
+			size = std::stoull(size_str);
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
-				storeClientFiles(fd, filename, hash);
+				storeFiles(fd, filename, size, hash);
 			}
 		}
-		if (file_info == end_marker) {
+		if (data == end_marker) {
 			break;
 		}
-	} while (!(response = receive(fd)).empty());
+	} while (!(response = receiveData(fd)).empty());
 	updateFilesWithSameHash();
 }
 
 bool Connection::checkConnection(int32_t fd) {
-	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
+	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr) == 0;
 }
 
-void Connection::sendFileList(int32_t fd) {
+int64_t Connection::sendListFiles(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
-	std::vector<std::string> files = listFiles();
-	std::string list = start_marker;
+	std::vector<std::string> files = getListFiles();
+	std::string list;
+	int64_t bytes = 0;
+	int64_t send_bytes;
+
+	send_bytes = sendData(fd, start_marker);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
+		return -1;
+	}
 
 	for (const auto& file : files) {
 		if (list.size() + file.size() > BUFFER_SIZE) {
-			sendToClient(fd, list);
+			if ((send_bytes = sendData(fd, list)) < 0) {
+				std::cerr << "[-] Error: Failed send the list of files." << std::endl;
+				return -1;
+			}
+			bytes += send_bytes;
 			list.clear();
 		}
 		list += file + ' ';
 	}
-	sendToClient(fd, list);
-	sendToClient(fd, end_marker);
+
+	send_bytes = sendData(fd, list);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
+		return -1;
+	}
+	bytes += send_bytes;
+
+	send_bytes = sendData(fd, end_marker);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
+		return -1;
+	}
+	return bytes;
 }
 
-void Connection::sendFile(int32_t fd, const std::string& filename) {
+int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
+	std::multimap<int32_t, FileInfo> files = getFilename(filename);
+	std::byte buffer[BUFFER_SIZE];
+	uint64_t size = getSize(filename);
+	int64_t send_bytes = 0;
+	int64_t read_bytes = 0;
+	int64_t bytes = 0;
+	int32_t client_fd = findFd(filename);
+	const std::string& command_error = commands_server[4];
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 
+	if (files.empty()) {
+		std::cerr << "[-] Error: Failed send the file." << std::endl;
+		return -1;
+	}
+
+	send_bytes = sendData(fd, start_marker);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed send the file." << std::endl;
+		return -1;
+	}
+
+	for (uint64_t offset = 0; bytes < size; offset += read_bytes) {
+		read_bytes = getFile(client_fd, filename, buffer, offset, BUFFER_SIZE);
+
+		if (read_bytes > 0) {
+			std::string data(reinterpret_cast<char*>(buffer), read_bytes);
+
+			send_bytes = sendData(fd, data);
+			if (send_bytes != read_bytes) {
+				std::cerr << "[-] Error: Failed send part of the file: " << filename << '.' << std::endl;
+				sendData(fd, command_error);
+				return -1;
+			}
+			bytes += send_bytes;
+			continue;
+		}
+		break;
+	}
+
+	send_bytes = sendData(fd, end_marker);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed send part of the file: " << filename << '.' << std::endl;
+		return -1;
+	}
+	std::cout << "[+] Success: File sent successfully: " << filename << '.' << std::endl;
+	return bytes;
 }
 
-std::vector<std::string> Connection::listFiles() {
+int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* buffer,
+                            uint64_t offset, uint64_t max_size) {
+	const std::string& command_part = commands_server[2] + ':' + std::to_string(offset) + ':' +
+			std::to_string(max_size) + ':' + filename;
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
+	const std::byte* start_marker_pos;
+	const std::byte* end_marker_pos;
+	int64_t send_bytes = 0;
+	int64_t bytes = 0;
+	uint64_t pos;
+	std::string response;
+	std::lock_guard<std::mutex> lock(mutex);
+
+	send_bytes = sendData(fd, command_part);
+	if (send_bytes < 0) {
+		std::cerr << "[-] Error: Failed get part of the file: " << filename << '.' << std::endl;
+		return -1;
+	}
+
+	response = receiveData(fd);
+	pos = response.find(start_marker);
+	if (pos != std::string::npos) {
+		response.erase(pos, start_marker.length());
+	}
+
+	do {
+		pos = response.find(end_marker);
+		if (pos == std::string::npos) {
+			std::memcpy(buffer, response.data(), std::min(response.size(), static_cast<std::size_t>(BUFFER_SIZE)));
+			continue;
+		}
+		response.erase(pos, end_marker.length());
+		std::memcpy(buffer, response.data(), std::min(response.size(), static_cast<std::size_t>(BUFFER_SIZE)));
+	} while (!(response = receiveData(fd)).empty());
+	return bytes;
+}
+
+int32_t Connection::findFd(const std::string& filename) {
+	for (const auto& it : storage) {
+		if (it.second.filename == filename) {
+			return it.first;
+		}
+	}
+	return -1;
+}
+
+std::vector<std::string> Connection::getListFiles() {
 	std::lock_guard<std::mutex> lock(mutex);
 	std::vector<std::string> list;
 
@@ -161,7 +286,7 @@ std::vector<std::string> Connection::listFiles() {
 	return list;
 }
 
-std::multimap<int32_t, FileInfo> Connection::findFilename(const std::string& filename) {
+std::multimap<int32_t, FileInfo> Connection::getFilename(const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 	std::multimap<int32_t, FileInfo> result;
 
@@ -173,23 +298,31 @@ std::multimap<int32_t, FileInfo> Connection::findFilename(const std::string& fil
 	return result;
 }
 
+uint64_t Connection::getSize(const std::string& filename) {
+	std::ifstream file(filename, std::ios::binary | std::ios::ate);
+	if (!file.is_open()) {
+		std::cerr << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
+		return -1;
+	}
+	return static_cast<uint64_t>(file.tellg());
+}
+
 void Connection::updateFilesWithSameHash() {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
 			if (first->second.hash == second->second.hash) {
-				first->second.filename = second->second.filename;
+				second->second.filename = first->second.filename;
 				break;
 			}
 		}
 	}
 }
 
-void Connection::storeClientFiles(int32_t fd, const std::string& filename, const std::string& hash) {
+void Connection::storeFiles(int32_t fd, const std::string& filename, uint64_t size, const std::string& hash) {
 	std::lock_guard<std::mutex> lock(mutex);
-	FileInfo data {hash, filename};
-
+	FileInfo data {size, hash, filename};
 	storage.insert(std::pair(fd, data));
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }

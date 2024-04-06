@@ -38,7 +38,7 @@ bool Connection::connectToServer(const std::string& server_ip, int32_t port) {
 
 	server_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (server_fd < 0) {
-		std::cerr << "[-] Error: Failed create receive socket." << std::endl;
+		std::cerr << "[-] Error: Failed create receiveData socket." << std::endl;
 		return false;
 	}
 
@@ -48,7 +48,7 @@ bool Connection::connectToServer(const std::string& server_ip, int32_t port) {
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 
 	if (bind(server_fd, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
-		std::cerr << "[-] Error: Failed bind receive socket." << std::endl;
+		std::cerr << "[-] Error: Failed bind receiveData socket." << std::endl;
 		return false;
 	}
 	if (connect(server_fd, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
@@ -70,12 +70,12 @@ int64_t Connection::getFile(const std::string& filename) const {
 	uint64_t pos_end;
 	int64_t bytes;
 
-	if (sendToServer(client_fd, command_get) < 0) {
+	if (sendData(client_fd, command_get) < 0) {
 		std::cerr << "[-] Error: Failed send the request." << std::endl;
 		return -1;
 	}
 
-	std::string response = receive(client_fd);
+	std::string response = receiveData(client_fd);
 	if (response == command_error) {
 		std::cerr << "[-] Error: The file does not exist." << std::endl;
 		return -1;
@@ -90,7 +90,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 	std::ofstream file(filename, std::ios::binary);
 	if (!file.is_open()) {
 		std::cerr << "[-] Error: Failed open the file for writing: " << filename << '.' << std::endl;
-		sendToServer(client_fd, command_error);
+		sendData(client_fd, command_error);
 		return -1;
 	}
 	do {
@@ -102,7 +102,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 		response.erase(pos_end, end_marker.length());
 		file.write(response.c_str(), static_cast<std::streamsize>(response.size()));
 		break;
-	} while (!(response = receive(client_fd)).empty());
+	} while (!(response = receiveData(client_fd)).empty());
 	bytes = file.tellp();
 	file.close();
 	return bytes;
@@ -117,11 +117,11 @@ std::list<std::string> Connection::getList() const {
 	std::string response;
 	uint64_t pos_start;
 
-	if (sendToServer(client_fd, command_list) < 0) {
+	if (sendData(client_fd, command_list) < 0) {
 		std::cerr << "[-] Error: Failed send the request." << std::endl;
 		return list;
 	}
-	response = receive(client_fd);
+	response = receiveData(client_fd);
 	if (response == command_error) {
 		std::cerr << "[-] Error: The list of files could not be retrieved." << std::endl;
 		return list;
@@ -143,16 +143,16 @@ std::list<std::string> Connection::getList() const {
 		if (filename == end_marker) {
 			break;
 		}
-	} while (!(response = receive(client_fd)).empty());
+	} while (!(response = receiveData(client_fd)).empty());
 	return list;
 }
 
 bool Connection::exit() const {
 	const std::string& command_exit = commands_client[2];
-	return sendToServer(server_fd, command_exit) > 0 && sendToServer(client_fd, command_exit) > 0;
+	return sendData(server_fd, command_exit) > 0 && sendData(client_fd, command_exit) > 0;
 }
 
-bool Connection::isConnect() const {
+bool Connection::isConnection() const {
 	return checkConnection(server_fd) && checkConnection(client_fd);
 }
 
@@ -183,7 +183,7 @@ int32_t Connection::getPort() {
 	return port;
 }
 
-int64_t Connection::sendToServer(int32_t fd, const std::string& command) {
+int64_t Connection::sendData(int32_t fd, const std::string& command) {
 	int64_t bytes;
 
 	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
@@ -193,7 +193,7 @@ int64_t Connection::sendToServer(int32_t fd, const std::string& command) {
 	return bytes;
 }
 
-std::string Connection::receive(int32_t fd) {
+std::string Connection::receiveData(int32_t fd) {
 	std::byte buffer[BUFFER_SIZE];
 	std::string received_data;
 	int64_t bytes;
@@ -225,37 +225,47 @@ std::list<std::string> Connection::getListFiles() {
 	return list;
 }
 
+uint64_t Connection::getFileSize(const std::string& filename) {
+	std::ifstream file(filename, std::ios::binary | std::ios::ate);
+	if (!file.is_open()) {
+		std::cerr << "Error: Failed to open the file: " << filename << std::endl;
+		return -1;
+	}
+	return file.tellg();
+}
+
 bool Connection::checkConnection(int32_t fd) {
-	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr);
+	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr) == 0;
 }
 
 int64_t Connection::sendList(int32_t fd) {
 	int64_t bytes = 0;
-	int64_t send_bytes = 0;
+	int64_t send_bytes;
 	std::string data;
 	std::list<std::string> list = getListFiles();
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	const std::string& command_error = commands_client[3];
 
-	send_bytes = sendToServer(fd, start_marker);
+	send_bytes = sendData(fd, start_marker);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
-		sendToServer(fd, command_error);
+		sendData(fd, command_error);
 		return -1;
 	}
 
 	for (const auto& filename : list) {
 		std::ostringstream oss;
 		std::string hash = calculateFileHash(filename);
+		uint64_t size = getFileSize(filename);
 
-		oss << filename << ':' << hash << ' ';
+		oss << filename << ':' << size << ':' << hash << ' ';
 		data += oss.str();
 		if (data.size() + filename.size() > BUFFER_SIZE) {
-			send_bytes = sendToServer(fd, data);
+			send_bytes = sendData(fd, data);
 			if (send_bytes < 0) {
 				std::cerr << "[-] Error: Failed send the list of files." << std::endl;
-				sendToServer(fd, command_error);
+				sendData(fd, command_error);
 				return -1;
 			}
 			bytes += send_bytes;
@@ -263,66 +273,66 @@ int64_t Connection::sendList(int32_t fd) {
 		}
 	}
 
-	send_bytes = sendToServer(fd, data);
+	send_bytes = sendData(fd, data);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
-		sendToServer(fd, command_error);
+		sendData(fd, command_error);
 		return -1;
 	}
 	bytes += send_bytes;
 
-	send_bytes = sendToServer(fd, end_marker);
+	send_bytes = sendData(fd, end_marker);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
-		sendToServer(fd, command_error);
+		sendData(fd, command_error);
 		return -1;
 	}
 	return bytes;
 }
 
-int64_t Connection::sendFile(int32_t fd, const std::string& filename, int64_t offset, int64_t size) {
+int64_t Connection::sendFile(int32_t fd, const std::string& filename, uint64_t offset, uint64_t size) {
 	std::byte buffer[BUFFER_SIZE];
 	std::ifstream file(filename, std::ios::binary);
-	int64_t send_bytes = 0;
 	int64_t bytes = 0;
+	int64_t send_bytes;
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 	const std::string& command_error = commands_client[3];
 
 	if (!file.is_open()) {
 		std::cerr << "[-] Error: Failed open the file: " << filename << '.' << std::endl;
-		sendToServer(fd, command_error);
+		sendData(fd, command_error);
 		return -1;
 	}
-	file.seekg(offset, std::ios::beg);
+	file.seekg(static_cast<off_t>(offset), std::ios::beg);
 
-	send_bytes = sendToServer(fd, start_marker);
+	send_bytes = sendData(fd, start_marker);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
-		sendToServer(fd, command_error);
+		sendData(fd, command_error);
 		return -1;
 	}
 
 	while (bytes < size && !file.eof()) {
-		int64_t read_bytes = (size - bytes) > BUFFER_SIZE ? BUFFER_SIZE : (size - bytes);
+		uint64_t read_bytes = (size - bytes) > BUFFER_SIZE ? BUFFER_SIZE : size - bytes;
 
 		if (!file.is_open()) {
 			std::cerr << "[-] Error: Failed read from the file: " << filename << '.' << std::endl;
-			sendToServer(fd, command_error);
+			sendData(fd, command_error);
 			return -1;
 		}
-		file.read(reinterpret_cast<char*>(buffer), read_bytes);
+		file.read(reinterpret_cast<char*>(buffer), static_cast<off_t>(read_bytes));
 
-		send_bytes = sendToServer(fd, reinterpret_cast<char*>(buffer));
+		send_bytes = sendData(fd, reinterpret_cast<char*>(buffer));
 		if (send_bytes < 0) {
 			std::cerr << "[-] Error: Failed send data to the server." << std::endl;
-			sendToServer(fd, command_error);
+			sendData(fd, command_error);
 			return -1;
 		}
 		bytes += send_bytes;
 	}
 
-	send_bytes = sendToServer(fd, end_marker);
+	send_bytes = sendData(fd, end_marker);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
 		return -1;
@@ -355,12 +365,12 @@ void Connection::handleServer() {
 	const std::string& command_exit = commands_server[3];
 	const std::string& command_error = commands_server[4];
 
-	while (isConnect()) {
-		command = receive(server_fd);
+	while (isConnection()) {
+		command = receiveData(server_fd);
 
 		if (command == command_list) {
 			if (sendList(server_fd) < 0) {
-				sendToServer(server_fd, command_error);
+				sendData(server_fd, command_error);
 				continue;
 			}
 		} else if (command.substr(0, 4) == command_get) {
@@ -369,7 +379,7 @@ void Connection::handleServer() {
 
 			if (!file.is_open()) {
 				std::cerr << "[-] Error: Failed open the file for reading: " << filename << '.' << std::endl;
-				sendToServer(server_fd, command_error);
+				sendData(server_fd, command_error);
 				continue;
 			}
 			file.seekg(0, std::ios::end);
@@ -380,7 +390,7 @@ void Connection::handleServer() {
 			file.read(reinterpret_cast<char*>(buffer), size);
 			if (sendFile(server_fd, filename, std::ios::beg, size) < 0) {
 				std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
-				sendToServer(server_fd, command_error);
+				sendData(server_fd, command_error);
 				continue;
 			}
 		} else if (command.substr(0, 5) == command_part) {
@@ -400,14 +410,14 @@ void Connection::handleServer() {
 
 				if (!file.is_open()) {
 					std::cerr << "[-] Error: Failed to open the file for reading: " << filename << '.' << std::endl;
-					sendToServer(server_fd, command_error);
+					sendData(server_fd, command_error);
 					continue;
 				}
 				file.seekg(offset, std::ios::beg);
 				file.read(reinterpret_cast<char*>(buffer), size);
 				if (sendFile(server_fd, filename, offset, size) < 0) {
 					std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
-					sendToServer(server_fd, command_error);
+					sendData(server_fd, command_error);
 					continue;
 				}
 			}
