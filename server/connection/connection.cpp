@@ -62,6 +62,7 @@ void Connection::handleClients(int32_t fd) {
 			break;
 		}
 	}
+	close(fd);
 	removeClientFiles(fd);
 }
 
