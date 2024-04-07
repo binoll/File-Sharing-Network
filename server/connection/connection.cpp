@@ -114,14 +114,15 @@ void Connection::synchronizationStorage(int32_t fd) {
 		std::string data;
 		std::string filename;
 		std::string hash;
-		uint64_t size;
+		int64_t size;
 
 		while (std::getline(iss, data, ' ') && data != end_marker) {
 			std::istringstream file_stream(data);
 			std::getline(file_stream, filename, ':');
 			std::string size_str;
 			std::getline(file_stream, size_str, ':');
-			size = std::stoull(size_str);
+			size = static_cast<int64_t>(std::stoull(size_str));
+      
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
 				storeFiles(fd, filename, size, hash);
@@ -190,8 +191,8 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 	std::multimap<int32_t, FileInfo> files = getFilename(filename);
 	std::byte buffer[BUFFER_SIZE];
 	uint64_t size = getSize(filename);
-	int64_t send_bytes = 0;
-	int64_t read_bytes = 0;
+	int64_t send_bytes;
+	int64_t read_bytes;
 	int64_t bytes = 0;
 	int32_t client_fd = findFd(filename);
 	const std::string& start_marker = marker[0];
@@ -210,10 +211,8 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 
 	for (uint64_t offset = 0; bytes < size; offset += read_bytes) {
 		read_bytes = getFile(client_fd, filename, buffer, offset, BUFFER_SIZE);
-
 		if (read_bytes > 0) {
 			std::string data(reinterpret_cast<char*>(buffer), read_bytes);
-
 			send_bytes = sendData(fd, data);
 			if (send_bytes != read_bytes) {
 				std::cerr << "[-] Error: Failed send part of the file: " << filename << '.' << std::endl;
@@ -240,10 +239,8 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 			std::to_string(max_size) + ':' + filename;
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
-	const std::byte* start_marker_pos;
-	const std::byte* end_marker_pos;
-	int64_t send_bytes = 0;
 	int64_t bytes = 0;
+	int64_t send_bytes;
 	uint64_t pos;
 	std::string response;
 	std::lock_guard<std::mutex> lock(mutex);
@@ -259,15 +256,17 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());
 	}
-
+  
 	do {
 		pos = response.find(end_marker);
 		if (pos == std::string::npos) {
 			std::memcpy(buffer, response.data(), std::min(response.size(), static_cast<std::size_t>(BUFFER_SIZE)));
+			bytes += static_cast<int64_t>(response.size());
 			continue;
 		}
 		response.erase(pos, end_marker.length());
 		std::memcpy(buffer, response.data(), std::min(response.size(), static_cast<std::size_t>(BUFFER_SIZE)));
+		bytes += static_cast<int64_t>(response.size());
 	} while (!(response = receiveData(fd)).empty());
 	return bytes;
 }
@@ -303,13 +302,14 @@ std::multimap<int32_t, FileInfo> Connection::getFilename(const std::string& file
 	return result;
 }
 
-uint64_t Connection::getSize(const std::string& filename) {
-	std::ifstream file(filename, std::ios::binary | std::ios::ate);
-	if (!file.is_open()) {
-		std::cerr << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
-		return -1;
+int64_t Connection::getSize(const std::string& filename) {
+	std::lock_guard<std::mutex> lock(mutex);
+	for (const auto& it : storage) {
+		if (it.second.hash == filename) {
+			return it.second.size;
+		}
 	}
-	return static_cast<uint64_t>(file.tellg());
+	return -1;
 }
 
 void Connection::updateFilesWithSameHash() {
@@ -325,7 +325,7 @@ void Connection::updateFilesWithSameHash() {
 	}
 }
 
-void Connection::storeFiles(int32_t fd, const std::string& filename, uint64_t size, const std::string& hash) {
+void Connection::storeFiles(int32_t fd, const std::string& filename, int64_t size, const std::string& hash) {
 	std::lock_guard<std::mutex> lock(mutex);
 	FileInfo data {size, hash, filename};
 	storage.insert(std::pair(fd, data));

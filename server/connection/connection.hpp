@@ -35,11 +35,11 @@ class Connection {
 
 	std::multimap<int32_t, FileInfo> getFilename(const std::string&);
 
-	static uint64_t getSize(const std::string&);
+	int64_t getSize(const std::string&);
 
 	void updateFilesWithSameHash();
 
-	void storeFiles(int32_t fd, const std::string& filename, uint64_t, const std::string& hash);
+	void storeFiles(int32_t, const std::string&, int64_t, const std::string& hash);
 
 	void removeClientFiles(int32_t);
 

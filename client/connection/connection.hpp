@@ -51,10 +51,10 @@ class Connection {
 	void handleServer();
 
 	std::string dir;
-	int32_t server_fd = -1;
-	int32_t client_fd = -1;
-	int32_t server_port = -1;
-	int32_t client_port = -1;
+	int32_t server_fd = 0;
+	int32_t client_fd = 0;
+	int32_t server_port = 0;
+	int32_t client_port = 0;
 	struct sockaddr_in client_addr { };
 	struct sockaddr_in server_addr { };
 	std::thread thread;
