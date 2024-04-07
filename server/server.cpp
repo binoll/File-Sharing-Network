@@ -8,6 +8,6 @@ int32_t main() {
 	std::cin >> port;
 
 	Connection connection(port);
-	connection.waitConnect();
+	connection.waitConnection();
 	return EXIT_SUCCESS;
 }

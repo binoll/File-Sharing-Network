@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cstring>
 #include <cstdint>
 #include <string>
 #include <thread>

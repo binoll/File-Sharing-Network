@@ -25,7 +25,7 @@ void CommandLine::run() {
 		std::string command;
 		int8_t choice;
 
-		if (!connection.isConnect()) {
+		if (!connection.isConnection()) {
 			std::cout << "[-] Error: The server is not available." << std::endl;
 			break;
 		}

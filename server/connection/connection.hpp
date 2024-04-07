@@ -8,30 +8,38 @@ class Connection {
 
 	~Connection();
 
-	void waitConnect();
+	void waitConnection();
+
+	[[nodiscard]] bool isConnect(int32_t) const;
 
  private:
-	void handleClients(int32_t);
+	void handleClients(int32_t, sockaddr_in);
 
-	static std::string receive(int32_t);
+	static std::string receiveData(int32_t);
 
-	static int64_t sendToClient(int32_t, const std::string&);
+	static int64_t sendData(int32_t fd, const std::string& command);
 
 	void synchronizationStorage(int32_t);
 
 	static bool checkConnection(int32_t);
 
-	void sendFileList(int32_t);
+	int64_t sendListFiles(int32_t fd);
 
-	void sendFile(int32_t, const std::string&);
+	int64_t sendFile(int32_t, const std::string&);
 
-	std::vector<std::string> listFiles();
+	int64_t getFile(int32_t, const std::string&, std::byte*, uint64_t, uint64_t);
 
-	std::multimap<int32_t, FileInfo> findFilename(const std::string&);
+	int32_t findFd(const std::string&);
+
+	std::vector<std::string> getListFiles();
+
+	std::multimap<int32_t, FileInfo> getFilename(const std::string&);
+
+	int64_t getSize(const std::string&);
 
 	void updateFilesWithSameHash();
 
-	void storeClientFiles(int32_t, const std::string&, const std::string&);
+	void storeFiles(int32_t, const std::string&, int64_t, const std::string& hash);
 
 	void removeClientFiles(int32_t);
 
