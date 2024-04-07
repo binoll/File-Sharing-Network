@@ -122,7 +122,6 @@ void Connection::synchronizationStorage(int32_t fd) {
 			std::string size_str;
 			std::getline(file_stream, size_str, ':');
 			size = static_cast<int64_t>(std::stoull(size_str));
-      
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
 				storeFiles(fd, filename, size, hash);
@@ -138,7 +137,6 @@ void Connection::synchronizationStorage(int32_t fd) {
 bool Connection::checkConnection(int32_t fd) {
 	int32_t optval;
 	socklen_t optlen = sizeof(optval);
-
 	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1 || optval != 0) {
 		return false;
 	}
@@ -256,7 +254,7 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());
 	}
-  
+
 	do {
 		pos = response.find(end_marker);
 		if (pos == std::string::npos) {

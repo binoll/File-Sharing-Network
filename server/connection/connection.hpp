@@ -17,13 +17,13 @@ class Connection {
 
 	static std::string receiveData(int32_t);
 
-	static int64_t sendData(int32_t fd, const std::string& command);
+	static int64_t sendData(int32_t, const std::string&);
 
 	void synchronizationStorage(int32_t);
 
 	static bool checkConnection(int32_t);
 
-	int64_t sendListFiles(int32_t fd);
+	int64_t sendListFiles(int32_t);
 
 	int64_t sendFile(int32_t, const std::string&);
 
@@ -39,7 +39,7 @@ class Connection {
 
 	void updateFilesWithSameHash();
 
-	void storeFiles(int32_t, const std::string&, int64_t, const std::string& hash);
+	void storeFiles(int32_t, const std::string&, int64_t, const std::string&);
 
 	void removeClientFiles(int32_t);
 
