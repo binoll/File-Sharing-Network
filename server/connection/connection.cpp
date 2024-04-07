@@ -135,7 +135,13 @@ void Connection::synchronizationStorage(int32_t fd) {
 }
 
 bool Connection::checkConnection(int32_t fd) {
-	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr) == 0;
+	int32_t optval;
+	socklen_t optlen = sizeof(optval);
+
+	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1 || optval != 0) {
+		return false;
+	}
+	return true;
 }
 
 int64_t Connection::sendListFiles(int32_t fd) {
@@ -153,15 +159,16 @@ int64_t Connection::sendListFiles(int32_t fd) {
 	}
 
 	for (const auto& file : files) {
+		list += file + ' ';
 		if (list.size() + file.size() > BUFFER_SIZE) {
-			if ((send_bytes = sendData(fd, list)) < 0) {
+			send_bytes = sendData(fd, list);
+			if (send_bytes < 0) {
 				std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 				return -1;
 			}
 			bytes += send_bytes;
 			list.clear();
 		}
-		list += file + ' ';
 	}
 
 	send_bytes = sendData(fd, list);

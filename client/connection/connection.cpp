@@ -153,7 +153,7 @@ bool Connection::exit() const {
 }
 
 bool Connection::isConnection() const {
-	return checkConnection(client_fd) == 0;
+	return checkConnection(client_fd) && checkConnection(server_fd);
 }
 
 int32_t Connection::getPort() {
@@ -235,7 +235,13 @@ uint64_t Connection::getFileSize(const std::string& filename) {
 }
 
 bool Connection::checkConnection(int32_t fd) {
-	return getsockopt(fd, SOL_SOCKET, SO_ERROR, nullptr, nullptr) == 0;
+	int32_t optval;
+	socklen_t optlen = sizeof(optval);
+
+	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1 || optval != 0) {
+		return false;
+	}
+	return true;
 }
 
 int64_t Connection::sendList(int32_t fd) {
