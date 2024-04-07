@@ -32,9 +32,9 @@ class Connection {
  private:
 	static int32_t getPort();
 
-	static int64_t sendData(int32_t, const std::string&);
+	static int64_t sendData(int32_t, const std::string&, int32_t);
 
-	[[nodiscard]] static std::string receiveData(int32_t);
+	[[nodiscard]] static std::string receiveData(int32_t, int32_t);
 
 	std::list<std::string> getListFiles();
 

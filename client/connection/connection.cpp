@@ -70,12 +70,12 @@ int64_t Connection::getFile(const std::string& filename) const {
 	uint64_t pos_end;
 	int64_t bytes;
 
-	if (sendData(client_fd, command_get) < 0) {
+	if (sendData(client_fd, command_get, MSG_CONFIRM) < 0) {
 		std::cerr << "[-] Error: Failed send the request." << std::endl;
 		return -1;
 	}
 
-	std::string response = receiveData(client_fd);
+	std::string response = receiveData(client_fd, MSG_WAITFORONE);
 	if (response == command_error) {
 		std::cerr << "[-] Error: The file does not exist." << std::endl;
 		return -1;
@@ -90,7 +90,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 	std::ofstream file(filename, std::ios::binary);
 	if (!file.is_open()) {
 		std::cerr << "[-] Error: Failed open the file for writing: " << filename << '.' << std::endl;
-		sendData(client_fd, command_error);
+		sendData(client_fd, command_error, MSG_CONFIRM);
 		return -1;
 	}
 	do {
@@ -102,7 +102,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 		response.erase(pos_end, end_marker.length());
 		file.write(response.c_str(), static_cast<std::streamsize>(response.size()));
 		break;
-	} while (!(response = receiveData(client_fd)).empty());
+	} while (!(response = receiveData(client_fd, MSG_WAITFORONE)).empty());
 	bytes = file.tellp();
 	file.close();
 	return bytes;
@@ -117,11 +117,11 @@ std::list<std::string> Connection::getList() const {
 	std::string response;
 	uint64_t pos_start;
 
-	if (sendData(client_fd, command_list) < 0) {
+	if (sendData(client_fd, command_list, MSG_CONFIRM) < 0) {
 		std::cerr << "[-] Error: Failed send the request." << std::endl;
 		return list;
 	}
-	response = receiveData(client_fd);
+	response = receiveData(client_fd, MSG_WAITFORONE);
 	if (response == command_error) {
 		std::cerr << "[-] Error: The list of files could not be retrieved." << std::endl;
 		return list;
@@ -143,13 +143,13 @@ std::list<std::string> Connection::getList() const {
 		if (filename == end_marker) {
 			break;
 		}
-	} while (!(response = receiveData(client_fd)).empty());
+	} while (!(response = receiveData(client_fd, MSG_WAITFORONE)).empty());
 	return list;
 }
 
 bool Connection::exit() const {
 	const std::string& command_exit = commands_client[2];
-	return sendData(server_fd, command_exit) > 0 && sendData(client_fd, command_exit) > 0;
+	return sendData(server_fd, command_exit, MSG_CONFIRM) > 0 && sendData(client_fd, command_exit, MSG_CONFIRM) > 0;
 }
 
 bool Connection::isConnection() const {
@@ -183,27 +183,21 @@ int32_t Connection::getPort() {
 	return port;
 }
 
-int64_t Connection::sendData(int32_t fd, const std::string& command) {
+int64_t Connection::sendData(int32_t fd, const std::string& command, int32_t flag) {
 	int64_t bytes;
 
-	bytes = send(fd, command.c_str(), command.size(), MSG_CONFIRM);
-	if (bytes < 0) {
-		std::cerr << "[-] Error: Failed send to the server." << std::endl;
-	}
+	bytes = send(fd, command.c_str(), command.size(), flag);
 	return bytes;
 }
 
-std::string Connection::receiveData(int32_t fd) {
+std::string Connection::receiveData(int32_t fd, int32_t flag) {
 	std::byte buffer[BUFFER_SIZE];
 	std::string received_data;
 	int64_t bytes;
 
-	bytes = recv(fd, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+	bytes = recv(fd, buffer, BUFFER_SIZE, flag);
 	if (bytes > 0) {
 		received_data.append(reinterpret_cast<char*>(buffer), bytes);
-	} else if (bytes < 0) {
-		std::cerr << "[-] Error: Failed receive data from server." << std::endl;
-		return "";
 	}
 	return received_data;
 }
@@ -252,7 +246,7 @@ int64_t Connection::sendList(int32_t fd) {
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 
-	send_bytes = sendData(fd, start_marker);
+	send_bytes = sendData(fd, start_marker, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 		return -1;
@@ -266,7 +260,7 @@ int64_t Connection::sendList(int32_t fd) {
 		oss << filename << ':' << size << ':' << hash << ' ';
 		data += oss.str();
 		if (data.size() + filename.size() > BUFFER_SIZE) {
-			send_bytes = sendData(fd, data);
+			send_bytes = sendData(fd, data, MSG_CONFIRM);
 			if (send_bytes < 0) {
 				std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 				return -1;
@@ -276,14 +270,14 @@ int64_t Connection::sendList(int32_t fd) {
 		}
 	}
 
-	send_bytes = sendData(fd, data);
+	send_bytes = sendData(fd, data, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 		return -1;
 	}
 	bytes += send_bytes;
 
-	send_bytes = sendData(fd, end_marker);
+	send_bytes = sendData(fd, end_marker, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 		return -1;
@@ -305,7 +299,7 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename, uint64_t o
 	}
 	file.seekg(static_cast<off_t>(offset), std::ios::beg);
 
-	send_bytes = sendData(fd, start_marker);
+	send_bytes = sendData(fd, start_marker, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
 		return -1;
@@ -320,7 +314,7 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename, uint64_t o
 		}
 		file.read(reinterpret_cast<char*>(buffer), static_cast<off_t>(read_bytes));
 
-		send_bytes = sendData(fd, reinterpret_cast<char*>(buffer));
+		send_bytes = sendData(fd, reinterpret_cast<char*>(buffer), MSG_CONFIRM);
 		if (send_bytes < 0) {
 			std::cerr << "[-] Error: Failed send data to the server." << std::endl;
 			return -1;
@@ -328,7 +322,7 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename, uint64_t o
 		bytes += send_bytes;
 	}
 
-	send_bytes = sendData(fd, end_marker);
+	send_bytes = sendData(fd, end_marker, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
 		return -1;
@@ -354,14 +348,13 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 }
 
 void Connection::handleServer() {
-	std::string command;
 	const std::string& command_list = commands_server[0];
 	const std::string& command_get = commands_server[1] + ':';
 	const std::string& command_part = commands_server[2] + ':';
 	const std::string& command_exit = commands_server[3];
 
 	while (isConnection()) {
-		command = receiveData(server_fd);
+		std::string command = receiveData(server_fd, MSG_DONTWAIT);
 
 		if (command == command_list) {
 			if (sendList(server_fd) < 0) {
