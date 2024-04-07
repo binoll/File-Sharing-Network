@@ -187,7 +187,6 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 	int64_t read_bytes = 0;
 	int64_t bytes = 0;
 	int32_t client_fd = findFd(filename);
-	const std::string& command_error = commands_server[4];
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 
@@ -211,7 +210,6 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 			send_bytes = sendData(fd, data);
 			if (send_bytes != read_bytes) {
 				std::cerr << "[-] Error: Failed send part of the file: " << filename << '.' << std::endl;
-				sendData(fd, command_error);
 				return -1;
 			}
 			bytes += send_bytes;
