@@ -122,6 +122,7 @@ void Connection::synchronizationStorage(int32_t fd) {
 			std::string size_str;
 			std::getline(file_stream, size_str, ':');
 			size = static_cast<int64_t>(std::stoull(size_str));
+      
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
 				storeFiles(fd, filename, size, hash);
@@ -255,7 +256,7 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());
 	}
-
+  
 	do {
 		pos = response.find(end_marker);
 		if (pos == std::string::npos) {
