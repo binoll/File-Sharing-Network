@@ -51,12 +51,12 @@ class Connection {
 	void handleServer();
 
 	std::string dir;
+	std::thread thread;
+	std::mutex mutex;
 	int32_t sockfd_communicate = 0;
 	int32_t sockfd_listen = 0;
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
-	std::thread thread;
-	std::mutex mutex;
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 };

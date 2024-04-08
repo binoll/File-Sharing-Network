@@ -170,18 +170,18 @@ int32_t Connection::getPort() {
 	return port;
 }
 
-int64_t Connection::sendData(int32_t fd, const std::string& command, int32_t flag) {
+int64_t Connection::sendData(int32_t fd, const std::string& command, int32_t flags) {
 	int64_t bytes;
-	bytes = send(fd, command.c_str(), command.size(), flag);
+	bytes = send(fd, command.c_str(), command.size(), flags);
 	return bytes;
 }
 
-std::string Connection::receiveData(int32_t fd, int32_t flag) {
+std::string Connection::receiveData(int32_t fd, int32_t flags) {
 	std::byte buffer[BUFFER_SIZE];
 	std::string received_data;
 	int64_t bytes;
 
-	bytes = recv(fd, buffer, BUFFER_SIZE, flag);
+	bytes = recv(fd, buffer, BUFFER_SIZE, flags);
 	if (bytes > 0) {
 		received_data.append(reinterpret_cast<char*>(buffer), bytes);
 	}
