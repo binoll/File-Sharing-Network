@@ -4,16 +4,18 @@
 
 class Connection {
  public:
-	explicit Connection(int32_t);
+	explicit Connection();
 
 	~Connection();
 
 	void waitConnection();
 
-	[[nodiscard]] bool isConnect(int32_t) const;
+	[[nodiscard]] static bool isConnect(int32_t, int32_t);
 
  private:
-	void handleClients(int32_t, sockaddr_in);
+	static int32_t getPort();
+
+	void handleClients(int32_t, int32_t);
 
 	static std::string receiveData(int32_t, int32_t);
 
@@ -46,8 +48,9 @@ class Connection {
 	static void split(const std::string&, char, std::vector<std::string>&);
 
 	std::multimap<int32_t, FileInfo> storage;
-	struct sockaddr_in addr_communicate { };
-	int32_t sockfd_communicate { };
-	int32_t server_port;
+	int32_t sockfd { };
+	struct sockaddr_in addr { };
 	std::mutex mutex;
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 };

@@ -34,11 +34,12 @@ bool Connection::connectToServer(const std::string& server_ip, int32_t port_list
 		return false;
 	}
 
-	if (bind(sockfd_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
-		std::cerr << "[-] Error: Failed bind receiveData socket." << std::endl;
+	if (inet_pton(AF_INET, server_ip.c_str(), &addr_listen.sin_addr) < 0) {
+		std::cerr << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	if (connect(sockfd_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
+	if (connect(sockfd_listen, reinterpret_cast<struct sockaddr*>(&addr_listen),
+	            sizeof(addr_listen)) < 0) {
 		std::cerr << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
 	}

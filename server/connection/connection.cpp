@@ -1,72 +1,107 @@
 #include "connection.hpp"
 
-Connection::Connection(int32_t port) : server_port(port) {
-	addr_communicate.sin_family = AF_INET;
-	addr_communicate.sin_addr.s_addr = INADDR_ANY;
-	addr_communicate.sin_port = htons(server_port);
+Connection::Connection() {
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = htons(getPort());
 }
 
 Connection::~Connection() {
-	close(sockfd_communicate);
+	close(sockfd);
 }
 
 void Connection::waitConnection() {
-	sockfd_communicate = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-	if (sockfd_communicate < 0) {
+	sockfd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (sockfd < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
 		return;
 	}
-	if (bind(sockfd_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate), sizeof(addr_communicate)) < 0) {
+	if (bind(sockfd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
 		std::cerr << "[-] Error: Failed to bind the socket." << std::endl;
 		return;
 	}
-	if (listen(sockfd_communicate, BACKLOG) < 0) {
+	if (listen(sockfd, BACKLOG) < 0) {
 		std::cerr << "[-] Error: Failed to listen." << std::endl;
 		return;
 	}
-	std::cout << "[*] Wait: server is listening for connections..." << std::endl;
+	std::cout << "[*] Wait: server is listening for connections " << inet_ntoa(addr.sin_addr) << ':'
+			<< htons(addr.sin_port) << std::endl;
 
 	while (true) {
-		int32_t client_fd;
-		struct sockaddr_in client_addr { };
-		socklen_t addr_len = sizeof(client_addr);
+		int32_t sockfd_listen;
+		int32_t sockfd_communicate;
+		struct sockaddr_in addr_listen { };
+		struct sockaddr_in addr_communicate { };
+		socklen_t addr_listen_len = sizeof(addr_listen);
+		socklen_t addr_communicate_len = sizeof(addr_communicate);
 
-		client_fd = accept(sockfd_communicate, reinterpret_cast<struct sockaddr*>(&client_addr), &addr_len);
-		if (client_fd < 0) { continue; }
-		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr.sin_addr)
-				<< ':' << client_addr.sin_port << '.' << std::endl;
-		std::thread(&Connection::handleClients, this, client_fd, client_addr).detach();
+		sockfd_listen = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr_listen), &addr_listen_len);
+		addr.sin_port = htons(getPort());
+		sockfd_communicate = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr_communicate),
+		                            &addr_communicate_len);
+		if (sockfd_listen < 0 || sockfd_communicate < 0) { continue; }
+		std::cout << "[+] Success: Client connected: " << inet_ntoa(addr_listen.sin_addr)
+				<< ':' << htons(addr_listen.sin_port) << ' ' << inet_ntoa(addr_listen.sin_addr) << ':'
+				<< htons(addr_communicate.sin_port) << '.' << std::endl;
+		std::thread(&Connection::handleClients, this, sockfd_listen, sockfd_communicate).detach();
 	}
 }
 
-bool Connection::isConnect(int32_t fd) const {
-	return checkConnection(sockfd_communicate) && checkConnection(fd);
+bool Connection::isConnect(int32_t sockfd_listen, int32_t sockfd_communicate) {
+	return checkConnection(sockfd_listen) && checkConnection(sockfd_communicate);
 }
 
-void Connection::handleClients(int32_t fd, sockaddr_in addr) {
+int32_t Connection::getPort() {
+	sockaddr_in addr { };
+	addr.sin_family = AF_INET;
+	addr.sin_addr.s_addr = INADDR_ANY;
+	addr.sin_port = 0;
+
+	int32_t fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		std::cerr << "[-] Error: Failed to create the socket." << std::endl;
+		return -1;
+	}
+	if (bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+		std::cerr << "[-] Error: Failed bind socket." << std::endl;
+		close(fd);
+		return -1;
+	}
+	socklen_t addr_len = sizeof(addr);
+	if (getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &addr_len) < 0) {
+		std::cerr << "[-] Error: Failed get socket name." << std::endl;
+		close(fd);
+		return -1;
+	}
+	int32_t port = ntohs(addr.sin_port);
+	close(fd);
+	return port;
+}
+
+void Connection::handleClients(int32_t sockfd_listen, int32_t sockfd_communicate) {
 	const std::string& command_list = commands_client[0];
 	const std::string& command_get = commands_client[1] + ':';
 	const std::string& command_exit = commands_client[2];
 
-	synchronizationStorage(fd);
-	while (isConnect(fd)) {
-		std::string command = receiveData(fd, MSG_DONTWAIT);
+	synchronizationStorage(sockfd_listen);
+	while (isConnect(sockfd_listen, sockfd_communicate)) {
+		std::string command = receiveData(sockfd_listen, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			sendListFiles(fd);
+			sendListFiles(sockfd_communicate);
 		} else if (command.find(command_get) != std::string::npos) {
 			std::vector<std::string> tokens;
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
-			sendFile(fd, filename);
+			sendFile(sockfd_communicate, filename);
 		} else if (command == command_exit) {
-			std::cout << "[+] Success: Client disconnected: " << inet_ntoa(addr.sin_addr)
-					<< ':' << addr.sin_port << '.' << std::endl;
+			std::cout << "[+] Success: Client disconnected." << std::endl;
 			break;
 		}
 	}
-	close(fd);
-	removeClientFiles(fd);
+	close(sockfd_listen);
+	close(sockfd_communicate);
+	removeClientFiles(sockfd_listen);
 }
 
 std::string Connection::receiveData(int32_t fd, int32_t flags) {
@@ -88,13 +123,11 @@ int64_t Connection::sendData(int32_t fd, const std::string& command, int32_t fla
 	return bytes;
 }
 
-void Connection::synchronizationStorage(int32_t fd) {
-	const std::string& start_marker = marker[0];
-	const std::string& end_marker = marker[1];
+void Connection::synchronizationStorage(int32_t sockfd) {
 	std::string response;
 	uint64_t pos_start;
 
-	response = receiveData(fd, MSG_WAITFORONE);
+	response = receiveData(sockfd, MSG_WAITFORONE);
 	pos_start = response.find(start_marker);
 
 	if (pos_start == std::string::npos) {
@@ -118,13 +151,13 @@ void Connection::synchronizationStorage(int32_t fd) {
 			size = static_cast<int64_t>(std::stoull(size_str));
 			std::getline(file_stream, hash);
 			if (!filename.empty() && !hash.empty()) {
-				storeFiles(fd, filename, size, hash);
+				storeFiles(sockfd, filename, size, hash);
 			}
 		}
 		if (data == end_marker) {
 			break;
 		}
-	} while (!(response = receiveData(fd, MSG_WAITFORONE)).empty());
+	} while (!(response = receiveData(sockfd, MSG_WAITFORONE)).empty());
 	updateFilesWithSameHash();
 }
 
@@ -138,8 +171,6 @@ bool Connection::checkConnection(int32_t fd) {
 }
 
 int64_t Connection::sendListFiles(int32_t fd) {
-	const std::string& start_marker = marker[0];
-	const std::string& end_marker = marker[1];
 	std::vector<std::string> files = getListFiles();
 	std::string list;
 	int64_t bytes = 0;
@@ -179,7 +210,6 @@ int64_t Connection::sendListFiles(int32_t fd) {
 	return bytes;
 }
 
-//-
 int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 	std::multimap<int32_t, FileInfo> files = getFilename(filename);
 	std::byte buffer[BUFFER_SIZE];
@@ -188,8 +218,6 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 	int64_t read_bytes;
 	int64_t bytes = 0;
 	int32_t client_fd = findFd(filename);
-	const std::string& start_marker = marker[0];
-	const std::string& end_marker = marker[1];
 
 	if (files.empty()) {
 		std::cerr << "[-] Error: Failed send the file." << std::endl;
@@ -226,13 +254,10 @@ int64_t Connection::sendFile(int32_t fd, const std::string& filename) {
 	return bytes;
 }
 
-//-
 int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* buffer,
                             uint64_t offset, uint64_t max_size) {
 	const std::string& command_part = commands_server[2] + ':' + std::to_string(offset) + ':' +
 			std::to_string(max_size) + ':' + filename;
-	const std::string& start_marker = marker[0];
-	const std::string& end_marker = marker[1];
 	int64_t bytes = 0;
 	int64_t send_bytes;
 	uint64_t pos;
@@ -245,7 +270,7 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 		return -1;
 	}
 
-	response = receiveData(sockfd_communicate, MSG_WAITFORONE);
+	response = receiveData(fd, MSG_WAITFORONE);
 	pos = response.find(start_marker);
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());

@@ -2,12 +2,8 @@
 #include "connection/connection.hpp"
 
 int32_t main() {
-	int32_t port;
+	Connection connection;
 
-	std::cout << "Write the port: ";
-	std::cin >> port;
-
-	Connection connection(port);
 	connection.waitConnection();
 	return EXIT_SUCCESS;
 }
