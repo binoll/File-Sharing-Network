@@ -19,7 +19,7 @@ class Connection {
 
 	~Connection();
 
-	bool connectToServer(const std::string&, int32_t);
+	bool connectToServer(const std::string&, int32_t, int32_t);
 
 	[[nodiscard]] int64_t getFile(const std::string&) const;
 
@@ -44,19 +44,19 @@ class Connection {
 
 	int64_t sendList(int32_t);
 
-	static int64_t sendFile(int32_t, const std::string&, uint64_t, uint64_t);
+	int64_t sendFile(int32_t, const std::string&, uint64_t, uint64_t);
 
 	std::string calculateFileHash(const std::string&);
 
 	void handleServer();
 
 	std::string dir;
-	int32_t server_fd = 0;
-	int32_t client_fd = 0;
-	int32_t server_port = 0;
-	int32_t client_port = 0;
-	struct sockaddr_in client_addr { };
-	struct sockaddr_in server_addr { };
+	int32_t sockfd_communicate = 0;
+	int32_t sockfd_listen = 0;
+	struct sockaddr_in addr_listen { };
+	struct sockaddr_in addr_communicate { };
 	std::thread thread;
 	std::mutex mutex;
+	const std::string& start_marker = marker[0];
+	const std::string& end_marker = marker[1];
 };

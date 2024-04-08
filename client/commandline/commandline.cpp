@@ -5,13 +5,16 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 	while (true) {
 		std::string ip;
-		int32_t port;
+		int32_t port_listen;
+		int32_t port_communicate;
 
 		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "[*] Write the port: ";
-		std::cin >> port;
-		if (!connection.connectToServer(ip, port)) {
+		std::cout << "[*] Write the port for listening: ";
+		std::cin >> port_listen;
+		std::cout << "[*] Write the port for communicate: ";
+		std::cin >> port_communicate;
+		if (!connection.connectToServer(ip, port_listen, port_communicate)) {
 			continue;
 		}
 		std::cout << "[+] The connection is established: " << ip << ':' << port << '.' << std::endl;

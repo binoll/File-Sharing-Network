@@ -1,26 +1,26 @@
 #include "connection.hpp"
 
 Connection::Connection(int32_t port) : server_port(port) {
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = INADDR_ANY;
-	server_addr.sin_port = htons(server_port);
+	addr_communicate.sin_family = AF_INET;
+	addr_communicate.sin_addr.s_addr = INADDR_ANY;
+	addr_communicate.sin_port = htons(server_port);
 }
 
 Connection::~Connection() {
-	close(server_fd);
+	close(sockfd_communicate);
 }
 
 void Connection::waitConnection() {
-	server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
-	if (server_fd < 0) {
+	sockfd_communicate = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+	if (sockfd_communicate < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
 		return;
 	}
-	if (bind(server_fd, reinterpret_cast<struct sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
+	if (bind(sockfd_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate), sizeof(addr_communicate)) < 0) {
 		std::cerr << "[-] Error: Failed to bind the socket." << std::endl;
 		return;
 	}
-	if (listen(server_fd, BACKLOG) < 0) {
+	if (listen(sockfd_communicate, BACKLOG) < 0) {
 		std::cerr << "[-] Error: Failed to listen." << std::endl;
 		return;
 	}
@@ -31,7 +31,7 @@ void Connection::waitConnection() {
 		struct sockaddr_in client_addr { };
 		socklen_t addr_len = sizeof(client_addr);
 
-		client_fd = accept(server_fd, reinterpret_cast<struct sockaddr*>(&client_addr), &addr_len);
+		client_fd = accept(sockfd_communicate, reinterpret_cast<struct sockaddr*>(&client_addr), &addr_len);
 		if (client_fd < 0) { continue; }
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr.sin_addr)
 				<< ':' << client_addr.sin_port << '.' << std::endl;
@@ -40,7 +40,7 @@ void Connection::waitConnection() {
 }
 
 bool Connection::isConnect(int32_t fd) const {
-	return checkConnection(server_fd) && checkConnection(fd);
+	return checkConnection(sockfd_communicate) && checkConnection(fd);
 }
 
 void Connection::handleClients(int32_t fd, sockaddr_in addr) {
@@ -245,7 +245,7 @@ int64_t Connection::getFile(int32_t fd, const std::string& filename, std::byte* 
 		return -1;
 	}
 
-	response = receiveData(server_fd, MSG_WAITFORONE);
+	response = receiveData(sockfd_communicate, MSG_WAITFORONE);
 	pos = response.find(start_marker);
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());

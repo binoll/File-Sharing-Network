@@ -46,8 +46,8 @@ class Connection {
 	static void split(const std::string&, char, std::vector<std::string>&);
 
 	std::multimap<int32_t, FileInfo> storage;
-	struct sockaddr_in server_addr { };
-	int32_t server_fd { };
+	struct sockaddr_in addr_communicate { };
+	int32_t sockfd_communicate { };
 	int32_t server_port;
 	std::mutex mutex;
 };
