@@ -12,8 +12,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		std::cout << "[*] Write the port: ";
 		std::cin >> port;
 		if (!connection.connectToServer(ip, port)) {
-			std::cout << "[-] Error: Failed connect to the server. Try again!" << std::endl;
-			return;
+			continue;
 		}
 		std::cout << "[+] The connection is established: " << ip << ':' << port << '.' << std::endl;
 		break;
