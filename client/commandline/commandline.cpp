@@ -17,7 +17,8 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		if (!connection.connectToServer(ip, port_listen, port_communicate)) {
 			continue;
 		}
-		std::cout << "[+] The connection is established: " << ip << ':' << port << '.' << std::endl;
+		std::cout << "[+] The connection is established: " << ip << ':' << port_listen << ", " << ip << ':'
+				<< port_communicate << '.' << std::endl;
 		break;
 	}
 }
@@ -31,9 +32,9 @@ void CommandLine::run() {
 			std::cout << "[-] Error: The server is not available." << std::endl;
 			break;
 		}
+
 		std::cout << "[*] Write the command (for help - \"help\"): ";
 		std::cin >> command;
-
 		choice = processing_command(command);
 		switch (choice) {
 			case 0: {
