@@ -321,9 +321,6 @@ void Connection::handleServer() {
 			std::streamsize size = file.tellg();
 			file.seekg(0, std::ios::beg);
 
-			std::byte buffer[size];
-			file.read(reinterpret_cast<char*>(buffer), size);
-
 			bytes = sendFile(sockfd_listen, filename, std::ios::beg, size);
 			if (bytes == -1) {
 				std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;

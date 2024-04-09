@@ -265,9 +265,12 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 
 	for (int64_t offset = 0; bytes < size; offset += read_bytes) {
 		if (files.size() > 1) {
-			read_bytes = getFile(pair.second, filename, buffer, offset, BUFFER_SIZE);
+			const std::string& command_part = commands_server[2] + ':' + std::to_string(offset) + ':' +
+					std::to_string(size) + ':' + filename;
+			read_bytes = getFile(pair.second, command_part, buffer, offset, BUFFER_SIZE);
 		} else {
-			read_bytes = getFile(pair.second, filename, buffer, offset, size);
+			const std::string& command_get = commands_server[1] + ':' + filename;
+			read_bytes = getFile(pair.second, command_get, buffer, offset, size);
 		}
 
 		if (read_bytes > 0) {
@@ -291,17 +294,15 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 	return bytes;
 }
 
-int64_t Connection::getFile(int32_t sockfd, const std::string& filename, std::byte* buffer,
+int64_t Connection::getFile(int32_t sockfd, const std::string& command, std::byte* buffer,
                             uint64_t offset, uint64_t size) {
-	const std::string& command_part = commands_server[2] + ':' + std::to_string(offset) + ':' +
-			std::to_string(size) + ':' + filename;
 	const std::string& command_error = commands_server[4];
 	std::string response;
 	int64_t bytes = 0;
 	int64_t send_bytes;
 	uint64_t pos;
 
-	send_bytes = sendData(sockfd, command_part, MSG_CONFIRM);
+	send_bytes = sendData(sockfd, command, MSG_CONFIRM);
 	if (send_bytes < 0) {
 		return -1;
 	}
@@ -327,6 +328,7 @@ int64_t Connection::getFile(int32_t sockfd, const std::string& filename, std::by
 		response.erase(pos, end_marker.length());
 		std::memcpy(buffer, response.data(), std::min(response.size(), static_cast<std::size_t>(BUFFER_SIZE)));
 		bytes += static_cast<int64_t>(response.size());
+		break;
 	} while (!(response = receiveData(sockfd, MSG_WAITFORONE)).empty());
 	return bytes;
 }
