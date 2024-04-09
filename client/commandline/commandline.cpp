@@ -10,14 +10,15 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 		std::cout << "[*] Write the ip-address: ";
 		std::cin >> ip;
-		std::cout << "[*] Write the port for listening: ";
-		std::cin >> port_listen;
 		std::cout << "[*] Write the port for communicate: ";
+		std::cin >> port_listen;
+		std::cout << "[*] Write the port for listening: ";
 		std::cin >> port_communicate;
 		if (!connection.connectToServer(ip, port_listen, port_communicate)) {
+			std::cout << "[-] Error: The connection was not established." << std::endl;
 			continue;
 		}
-		std::cout << "[+] The connection is established: " << ip << ':' << port_listen << ", " << ip << ':'
+		std::cout << "[+] The connection is established: " << ip << ':' << port_listen << ' ' << ip << ':'
 				<< port_communicate << '.' << std::endl;
 		break;
 	}
@@ -26,6 +27,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 void CommandLine::run() {
 	while (true) {
 		std::string command;
+		int64_t bytes;
 		int8_t choice;
 
 		if (!connection.isConnection()) {
@@ -33,7 +35,7 @@ void CommandLine::run() {
 			break;
 		}
 
-		std::cout << "[*] Write the command (for help - \"help\"): ";
+		std::cout << "[*] Write the command: ";
 		std::cin >> command;
 		choice = processing_command(command);
 		switch (choice) {
@@ -49,7 +51,7 @@ void CommandLine::run() {
 				std::list<std::string> list = connection.getList();
 
 				if (list.empty()) {
-					std::cout << "[-] Error: No clients available. Try again!" << std::endl;
+					std::cerr << "[-] Error: The list of files could not be retrieved." << std::endl;
 					continue;
 				}
 				std::cout << "[+] Success. List: " << std::endl;
@@ -64,17 +66,24 @@ void CommandLine::run() {
 
 				std::cout << "[*] Write the name of the file: ";
 				std::cin >> filename;
+
 				if (filename.empty()) {
-					std::cout << "[-] Error: The name of the file is empty. Try again!" << std::endl;
+					std::cout << "[-] Error: The name of the file is empty." << std::endl;
 					continue;
 				}
-				if (connection.getFile(filename) < 0) {
-					std::cout << "[-] Error: Failed to download the file. Try again!" << std::endl;
+
+				bytes = connection.getFile(filename);
+				if (bytes == -1) {
+					std::cout << "[-] Error: Failed to download the file." << std::endl;
+				} else if (bytes == -2) {
+					std::cout << "[-] Error: The file does not exist." << std::endl;
+				} else if (bytes == -3) {
+					std::cout << "[-] Error: Failed open the file for writing: " << filename << '.' << std::endl;
 				}
 				continue;
 			}
 			default: {
-				std::cout << "[-] Error: This command does not exist. Try again!" << std::endl;
+				std::cout << "[-] Error: This command does not exist." << std::endl;
 				continue;
 			}
 		}

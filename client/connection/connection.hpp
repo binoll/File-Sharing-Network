@@ -30,11 +30,9 @@ class Connection {
 	[[nodiscard]] bool isConnection() const;
 
  private:
-	static int32_t getPort();
-
 	static int64_t sendData(int32_t, const std::string&, int32_t);
 
-	[[nodiscard]] static std::string receiveData(int32_t, int32_t);
+	static std::string receiveData(int32_t, int32_t);
 
 	std::list<std::string> getListFiles();
 
@@ -51,12 +49,12 @@ class Connection {
 	void handleServer();
 
 	std::string dir;
-	std::thread thread;
-	std::mutex mutex;
-	int32_t sockfd_communicate = 0;
-	int32_t sockfd_listen = 0;
+	int32_t sockfd_listen;
+	int32_t sockfd_communicate;
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
+	std::thread thread;
+	std::mutex mutex;
 	const std::string& start_marker = marker[0];
 	const std::string& end_marker = marker[1];
 };

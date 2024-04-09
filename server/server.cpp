@@ -2,8 +2,9 @@
 #include "connection/connection.hpp"
 
 int32_t main() {
-	Connection connection;
+	int32_t port;
 
+	Connection connection;
 	connection.waitConnection();
 	return EXIT_SUCCESS;
 }
