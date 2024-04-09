@@ -136,10 +136,12 @@ void Connection::handleClients(int32_t client_sockfd_listen, int32_t client_sock
 	close(client_sockfd_listen);
 	close(client_sockfd_communicate);
 	removeClientFiles(std::pair(client_sockfd_listen, client_sockfd_communicate));
+	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
 
 int64_t Connection::sendData(int32_t sockfd, const std::string& command, int32_t flags) {
 	int64_t bytes;
+	std::lock_guard<std::mutex> lock(mutex);
 
 	bytes = send(sockfd, command.c_str(), command.size(), flags);
 	return bytes;
@@ -149,6 +151,7 @@ std::string Connection::receiveData(int32_t sockfd, int32_t flags) {
 	std::byte buffer[BUFFER_SIZE];
 	int64_t bytes;
 	std::string receive_data;
+	std::lock_guard<std::mutex> lock(mutex);
 
 	bytes = recv(sockfd, buffer, BUFFER_SIZE, flags);
 	if (bytes > 0) {
@@ -246,12 +249,12 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> files = getFilename(filename);
 	std::pair<int32_t, int32_t> pair = findFd(filename);
 	std::byte buffer[BUFFER_SIZE];
-	uint64_t size = getSize(filename);
+	int64_t size = getSize(filename);
 	int64_t send_bytes;
 	int64_t read_bytes;
 	int64_t bytes = 0;
 
-	if (files.empty()) {
+	if (pair.first == -1 || pair.second == -1) {
 		return -1;
 	}
 
@@ -260,8 +263,13 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 		return -1;
 	}
 
-	for (uint64_t offset = 0; bytes < size; offset += read_bytes) {
-		read_bytes = getFile(pair.first, filename, buffer, offset, BUFFER_SIZE);
+	for (int64_t offset = 0; bytes < size; offset += read_bytes) {
+		if (files.size() > 1) {
+			read_bytes = getFile(pair.second, filename, buffer, offset, BUFFER_SIZE);
+		} else {
+			read_bytes = getFile(pair.second, filename, buffer, offset, size);
+		}
+
 		if (read_bytes > 0) {
 			std::string data(reinterpret_cast<char*>(buffer), read_bytes);
 			send_bytes = sendData(sockfd, data, MSG_CONFIRM);
@@ -270,6 +278,8 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 			}
 			bytes += send_bytes;
 			continue;
+		} else if (read_bytes == -2) {
+			return -1;
 		}
 		break;
 	}
@@ -282,9 +292,10 @@ int64_t Connection::sendFile(int32_t sockfd, const std::string& filename) {
 }
 
 int64_t Connection::getFile(int32_t sockfd, const std::string& filename, std::byte* buffer,
-                            uint64_t offset, uint64_t max_size) {
+                            uint64_t offset, uint64_t size) {
 	const std::string& command_part = commands_server[2] + ':' + std::to_string(offset) + ':' +
-			std::to_string(max_size) + ':' + filename;
+			std::to_string(size) + ':' + filename;
+	const std::string& command_error = commands_server[4];
 	std::string response;
 	int64_t bytes = 0;
 	int64_t send_bytes;
@@ -296,6 +307,11 @@ int64_t Connection::getFile(int32_t sockfd, const std::string& filename, std::by
 	}
 
 	response = receiveData(sockfd, MSG_WAITFORONE);
+
+	if (response == command_error) {
+		return -2;
+	}
+
 	pos = response.find(start_marker);
 	if (pos != std::string::npos) {
 		response.erase(pos, start_marker.length());
@@ -316,9 +332,9 @@ int64_t Connection::getFile(int32_t sockfd, const std::string& filename, std::by
 }
 
 std::pair<int32_t, int32_t> Connection::findFd(const std::string& filename) {
-	for (const auto& it : storage) {
-		if (it.second.filename == filename) {
-			return it.first;
+	for (const auto& item : storage) {
+		if (item.second.filename == filename) {
+			return item.first;
 		}
 	}
 	return std::make_pair(-1, -1);
@@ -350,7 +366,7 @@ int64_t Connection::getSize(const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (const auto& it : storage) {
-		if (it.second.hash == filename) {
+		if (it.second.filename == filename) {
 			return it.second.size;
 		}
 	}

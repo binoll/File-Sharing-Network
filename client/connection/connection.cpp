@@ -50,7 +50,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 	return true;
 }
 
-int64_t Connection::getFile(const std::string& filename) const {
+int64_t Connection::getFile(const std::string& filename) {
 	const std::string& command_error = commands_client[3];
 	const std::string& command_get = commands_client[1] + ":" + filename;
 	std::string response;
@@ -94,7 +94,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 	return bytes;
 }
 
-std::list<std::string> Connection::getList() const {
+std::list<std::string> Connection::getList() {
 	const std::string& command_error = commands_client[3];
 	const std::string& command_list = commands_client[0];
 	std::list<std::string> list;
@@ -132,17 +132,18 @@ std::list<std::string> Connection::getList() const {
 	return list;
 }
 
-bool Connection::exit() const {
+bool Connection::exit() {
 	const std::string& command_exit = commands_client[2];
 	return sendData(sockfd_communicate, command_exit, MSG_CONFIRM) > 0;
 }
 
-bool Connection::isConnection() const {
+bool Connection::isConnection() {
 	return checkConnection(sockfd_communicate) && checkConnection(sockfd_listen);
 }
 
 int64_t Connection::sendData(int32_t fd, const std::string& command, int32_t flags) {
 	int64_t bytes;
+	std::lock_guard<std::mutex> lock(mutex);
 
 	bytes = send(fd, command.c_str(), command.size(), flags);
 	return bytes;
@@ -152,6 +153,7 @@ std::string Connection::receiveData(int32_t fd, int32_t flags) {
 	std::byte buffer[BUFFER_SIZE];
 	int64_t bytes;
 	std::string receive_data;
+	std::lock_guard<std::mutex> lock(mutex);
 
 	bytes = recv(fd, buffer, BUFFER_SIZE, flags);
 	if (bytes > 0) {
@@ -236,7 +238,7 @@ int64_t Connection::sendList(int32_t fd) {
 	return bytes;
 }
 
-int64_t Connection::sendFile(int32_t fd, const std::string& filename, uint64_t offset, uint64_t size) {
+int64_t Connection::sendFile(int32_t fd, const std::string& filename, int64_t offset, int64_t size) {
 	std::byte buffer[BUFFER_SIZE];
 	std::ifstream file(filename, std::ios::binary);
 	int64_t bytes = 0;
@@ -296,6 +298,8 @@ void Connection::handleServer() {
 	const std::string& command_get = commands_server[1] + ':';
 	const std::string& command_part = commands_server[2] + ':';
 	const std::string& command_exit = commands_server[3];
+	const std::string& command_error = commands_server[4];
+
 
 	while (isConnection()) {
 		command = receiveData(sockfd_listen, MSG_DONTWAIT);
@@ -329,34 +333,32 @@ void Connection::handleServer() {
 			continue;
 		} else if (command.substr(0, 5) == command_part) {
 			std::istringstream iss(command.substr(5));
-			uint64_t colon1 = command.find(':', 5);
-			uint64_t colon2 = command.find(':', colon1 + 1);
-			uint64_t colon3 = command.find(':', colon2 + 1);
+			std::vector<std::string> tokens;
+			std::string token;
 
-			if (colon1 != std::string::npos && colon2 != std::string::npos && colon3 != std::string::npos) {
-				off_t offset = static_cast<off_t>(std::stoull(command.substr(5, colon1 - 5)));
-				std::streamsize size = static_cast<std::streamsize>(
-						std::stoull(command.substr(colon1 + 1, colon2 - colon1 - 1))
-				);
-				std::string filename = command.substr(colon3 + 1);
-				std::ifstream file(filename, std::ios::binary);
-				std::byte buffer[size];
-
-				if (!file.is_open()) {
-					std::cerr << "[-] Error: Failed to open the file for reading: " << filename << '.' << std::endl;
-					continue;
-				}
-				file.seekg(offset, std::ios::beg);
-				file.read(reinterpret_cast<char*>(buffer), size);
-
-				bytes = sendFile(sockfd_listen, filename, offset, size);
-				if (bytes == -1) {
-					std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
-				} else if (bytes == -2) {
-					std::cerr << "[-] Error: Failed open the file: " << filename << '.' << std::endl;
-				}
-				continue;
+			while (std::getline(iss, token, ':')) {
+				tokens.push_back(token);
 			}
+
+			if (tokens.size() > 3) {
+				sendData(sockfd_listen, command_error, MSG_CONFIRM);
+				return;
+			}
+			auto offset = static_cast<off_t>(std::stoull(tokens[0]));
+			auto size = static_cast<std::streamsize>(std::stoull(tokens[1]));
+
+			std::string filename = tokens[2];
+			for (size_t i = 3; i < tokens.size(); ++i) {
+				filename += ":" + tokens[i];
+			}
+
+			bytes = sendFile(sockfd_listen, filename, offset, size);
+			if (bytes == -1) {
+				std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
+			} else if (bytes == -2) {
+				std::cerr << "[-] Error: Failed open the file: " << filename << '.' << std::endl;
+			}
+			continue;
 		} else if (command == command_exit) {
 			break;
 		}

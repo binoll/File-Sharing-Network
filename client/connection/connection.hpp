@@ -21,18 +21,18 @@ class Connection {
 
 	bool connectToServer(const std::string&, int32_t, int32_t);
 
-	[[nodiscard]] int64_t getFile(const std::string&) const;
+	[[nodiscard]] int64_t getFile(const std::string&);
 
-	[[nodiscard]] std::list<std::string> getList() const;
+	[[nodiscard]] std::list<std::string> getList();
 
-	[[nodiscard]] bool exit() const;
+	bool exit();
 
-	[[nodiscard]] bool isConnection() const;
+	bool isConnection();
 
  private:
-	static int64_t sendData(int32_t, const std::string&, int32_t);
+	int64_t sendData(int32_t, const std::string&, int32_t);
 
-	static std::string receiveData(int32_t, int32_t);
+	std::string receiveData(int32_t, int32_t);
 
 	std::list<std::string> getListFiles();
 
@@ -42,7 +42,7 @@ class Connection {
 
 	int64_t sendList(int32_t);
 
-	int64_t sendFile(int32_t, const std::string&, uint64_t, uint64_t);
+	int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
 
 	std::string calculateFileHash(const std::string&);
 

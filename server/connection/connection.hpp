@@ -17,9 +17,9 @@ class Connection {
 
 	void handleClients(int32_t, int32_t);
 
-	static std::string receiveData(int32_t, int32_t);
+	std::string receiveData(int32_t, int32_t);
 
-	static int64_t sendData(int32_t, const std::string&, int32_t);
+	int64_t sendData(int32_t, const std::string&, int32_t);
 
 	bool synchronizationStorage(int32_t, int32_t);
 
