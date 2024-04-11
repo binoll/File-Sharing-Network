@@ -5,12 +5,11 @@
 /*
  * Commands from the server:
  * 1. list - send storage of clients.
- * 2. get:filename - send the file.
- * 3. part:offset:size:filename - send part of the file.
+ * 2. part:offset:size:file_name - send part of the file.
  *
  *  Commands to server:
- *  1. getListFiles (filename:[hash]) - send storage of clients.
- *  2. get:filename - download the file.
+ *  1. getListFiles (file_name:[hash]) - send storage of clients.
+ *  2. get:file_name - download the file.
  *  3. exit - close connection with server.
  */
 class Connection {
@@ -21,32 +20,40 @@ class Connection {
 
 	bool connectToServer(const std::string&, int32_t, int32_t);
 
-	[[nodiscard]] int64_t getFile(const std::string&);
+	int64_t getFile(const std::string&);
 
-	[[nodiscard]] std::list<std::string> getList();
+	int64_t getList(std::vector<std::string>&);
 
 	bool exit();
 
-	bool isConnection();
+	[[nodiscard]] bool isConnection() const;
 
  private:
-	int64_t sendData(int32_t, const std::string&, int32_t);
-
-	std::string receiveData(int32_t, int32_t);
-
-	std::list<std::string> getListFiles();
-
-	static uint64_t getFileSize(const std::string&);
-
-	static bool checkConnection(int32_t);
-
-	int64_t sendList(int32_t);
+	void handleServer();
 
 	int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
 
+	int64_t sendList(int32_t sockfd);
+
+	int64_t sendMessage(int32_t, const std::string&, int32_t);
+
+	int64_t receiveMessage(int32_t, std::string&, int32_t flags);
+
+	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+
+	int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+
+	static int64_t processResponse(std::string&);
+
+	static bool checkConnection(int32_t);
+
+	std::vector<std::string> getListFiles();
+
+	static uint64_t getFileSize(const std::string&);
+
 	std::string calculateFileHash(const std::string&);
 
-	void handleServer();
+	bool isFileExist(const std::string&);
 
 	std::string dir;
 	int32_t sockfd_listen;
@@ -55,6 +62,4 @@ class Connection {
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;
 	std::mutex mutex;
-	const std::string& start_marker = marker[0];
-	const std::string& end_marker = marker[1];
 };

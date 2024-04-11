@@ -1,6 +1,6 @@
 #pragma once
 
-#include <condition_variable>
+#include <unordered_map>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,5 +24,4 @@
 #define BUFFER_SIZE 1024
 
 const std::vector<std::string> commands_client = {"list", "get", "exit", "error"};
-const std::vector<std::string> commands_server = {"list", "get", "part", "exit", "error"};
-const std::vector<std::string> marker = {"start: ", ":end"};
+const std::vector<std::string> commands_server = {"list", "get", "exit", "error"};

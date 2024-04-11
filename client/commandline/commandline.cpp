@@ -18,8 +18,6 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 			std::cout << "[-] Error: The connection was not established." << std::endl;
 			continue;
 		}
-		std::cout << "[+] The connection is established: " << ip << ':' << port_listen << ' ' << ip << ':'
-				<< port_communicate << '.' << std::endl;
 		break;
 	}
 }
@@ -48,7 +46,8 @@ void CommandLine::run() {
 				continue;
 			}
 			case 2: {
-				std::list<std::string> list = connection.getList();
+				std::vector<std::string> list;
+				connection.getList(list);
 
 				if (list.empty()) {
 					std::cerr << "[-] Error: The list of files could not be retrieved." << std::endl;
@@ -62,23 +61,21 @@ void CommandLine::run() {
 				continue;
 			}
 			case 3: {
-				std::string filename;
+				std::string file_name;
 
 				std::cout << "[*] Write the name of the file: ";
-				std::cin >> filename;
+				std::cin >> file_name;
 
-				if (filename.empty()) {
+				if (file_name.empty()) {
 					std::cout << "[-] Error: The name of the file is empty." << std::endl;
 					continue;
 				}
 
-				bytes = connection.getFile(filename);
+				bytes = connection.getFile(file_name);
 				if (bytes == -1) {
 					std::cout << "[-] Error: Failed to download the file." << std::endl;
 				} else if (bytes == -2) {
-					std::cout << "[-] Error: The file does not exist." << std::endl;
-				} else if (bytes == -3) {
-					std::cout << "[-] Error: Failed open the file for writing: " << filename << '.' << std::endl;
+					std::cout << "[-] Error: The file exists in your directory." << std::endl;
 				}
 				continue;
 			}
