@@ -16,7 +16,13 @@ class CommandLine {
 
 	static void help();
 
-	int8_t processing_command(const std::string&);
+	void getList();
+
+	void getFile(std::string&);
+
+	static std::string parseGetCommand(const std::string&);
+
+	int8_t processingCommand(const std::string&);
 
 	Connection connection;
 	std::vector<std::string> commands = {"exit", "help", "list", "get"};
