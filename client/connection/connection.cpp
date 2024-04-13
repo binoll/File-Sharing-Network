@@ -1,9 +1,9 @@
 #include "connection.hpp"
 
 Connection::Connection(std::string dir) : dir(std::move(dir)) {
-	sockfd_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	sockfd_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (sockfd_listen < 0 || sockfd_communicate < 0) {
+	socket_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (socket_listen < 0 || socket_communicate < 0) {
 		std::cerr << "[-] Error: Failed to create socket." << std::endl;
 	}
 }
@@ -12,8 +12,8 @@ Connection::~Connection() {
 	if (thread.joinable()) {
 		thread.join();
 	}
-	close(sockfd_listen);
-	close(sockfd_communicate);
+	close(socket_listen);
+	close(socket_communicate);
 }
 
 bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int32_t port_communicate) {
@@ -26,7 +26,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cerr << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	if (connect(sockfd_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
+	if (connect(socket_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
 		std::cerr << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
 	}
@@ -35,13 +35,13 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cerr << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	if (connect(sockfd_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate),
+	if (connect(socket_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate),
 	            sizeof(addr_communicate)) < 0) {
 		std::cerr << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
 	}
 
-	if (sendList(sockfd_communicate) == -1) {
+	if (sendList(socket_communicate) == -1) {
 		std::cerr << "[-] Error: Failed send the list of files." << std::endl;
 		return false;
 	}
@@ -69,12 +69,12 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -1;
 	}
 
-	bytes = sendMessage(sockfd_communicate, command_get, MSG_CONFIRM);
+	bytes = sendMessage(socket_communicate, command_get, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(sockfd_communicate, response, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
 	if (bytes < 0) {
 		return -1;
 	} else if (bytes == 0) {
@@ -95,7 +95,7 @@ int64_t Connection::getFile(const std::string& filename) {
 			break;
 		}
 
-		bytes = receiveBytes(sockfd_communicate, buffer, size, MSG_WAITFORONE);
+		bytes = receiveBytes(socket_communicate, buffer, size, MSG_WAITFORONE);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -111,12 +111,12 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 	std::string response;
 	const std::string& command_list = commands_client[0];
 
-	bytes = sendMessage(sockfd_communicate, command_list, MSG_CONFIRM);
+	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(sockfd_communicate, response, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -136,7 +136,7 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 			break;
 		}
 
-		bytes = receiveMessage(sockfd_communicate, response, MSG_WAITFORONE);
+		bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -147,11 +147,11 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 
 bool Connection::exit() {
 	const std::string& command_exit = commands_client[2];
-	return sendMessage(sockfd_communicate, command_exit, MSG_CONFIRM) > 0;
+	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
 }
 
 bool Connection::isConnection() const {
-	return checkConnection(sockfd_communicate) && checkConnection(sockfd_listen);
+	return checkConnection(socket_communicate) && checkConnection(socket_listen);
 }
 
 void Connection::handleServer() {
@@ -162,10 +162,10 @@ void Connection::handleServer() {
 
 	while (isConnection()) {
 		std::string command;
-		receiveMessage(sockfd_listen, command, MSG_DONTWAIT);
+		receiveMessage(socket_listen, command, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			bytes = sendList(sockfd_communicate);
+			bytes = sendList(socket_communicate);
 			if (bytes < 0) {
 				continue;
 			}
@@ -186,7 +186,7 @@ void Connection::handleServer() {
 				filename += ":" + tokens[i];
 			}
 
-			bytes = sendFile(sockfd_communicate, filename, offset, size);
+			bytes = sendFile(socket_communicate, filename, offset, size);
 			if (bytes == -1) {
 				std::cerr << "[-] Error: Failed send the file: " << filename << '.' << std::endl;
 			} else if (bytes == -2) {

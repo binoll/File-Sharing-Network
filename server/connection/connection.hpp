@@ -49,8 +49,8 @@ class Connection {
 
 	static void split(const std::string&, char, std::vector<std::string>&);
 
-	int32_t sockfd_listen { };
-	int32_t sockfd_communicate { };
+	int32_t socket_listen { };
+	int32_t socket_communicate { };
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;

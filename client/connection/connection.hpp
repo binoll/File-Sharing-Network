@@ -56,8 +56,8 @@ class Connection {
 	bool isFileExist(const std::string&);
 
 	std::string dir;
-	int32_t sockfd_listen;
-	int32_t sockfd_communicate;
+	int32_t socket_listen;
+	int32_t socket_communicate;
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;

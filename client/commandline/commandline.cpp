@@ -1,10 +1,36 @@
 #include "commandline.hpp"
 
 CommandLine::CommandLine(std::string& path) : connection(path) {
-	std::cout << "\033[1;34m" << "+=========================+" << std::endl;
-	std::cout << "\033[1;34m" << "|   Welcome to the file   |" << std::endl;
-	std::cout << "\033[1;34m" << "|      sharing app!       |" << std::endl;
-	std::cout << "\033[1;34m" << "+=========================+" << std::endl;
+	std::cout << "+=========================+" << std::endl;
+	std::cout << "|   Welcome to the file   |" << std::endl;
+	std::cout << "|      sharing app!       |" << std::endl;
+	std::cout << "+=========================+" << std::endl;
+
+	while (true) {
+		std::cout << "[*] List of console colors:" << std::endl;
+		std::cout << "1. Black" << std::endl;
+		std::cout << "2. Red" << std::endl;
+		std::cout << "3. Green" << std::endl;
+		std::cout << "4. Yellow" << std::endl;
+		std::cout << "5. Blue" << std::endl;
+		std::cout << "6. Magenta" << std::endl;
+		std::cout << "7. Cyan" << std::endl;
+		std::cout << "8. White" << std::endl;
+		std::cout << "[*] Enter text color: ";
+
+		int choice;
+		std::cin >> choice;
+
+		if (choice >= 1 && choice <= 8) {
+			auto color = static_cast<ConsoleColor>(choice + static_cast<int>(ConsoleColor::Black) - 1);
+			setConsoleColor(color);
+			std::cout << "[+] Success: You chose color is " << getColorString(color) << '.' << std::endl;
+			break;
+		} else {
+			std::cout << "[-] Error: Invalid color choice." << std::endl;
+			continue;
+		}
+	}
 
 	while (true) {
 		std::string ip;
@@ -46,22 +72,45 @@ void CommandLine::run() {
 			}
 			case 1: {
 				help();
-				break;
+				continue;
 			}
 			case 2: {
 				getList();
-				break;
+				continue;
 			}
 			case 3: {
-				getFile(command);
-				break;
+				std::string filename;
+
+				std::cin >> filename;
+				getFile(filename);
+				continue;
 			}
 			default: {
 				std::cout << "[-] Error: This command does not exist." << std::endl;
-				break;
+				continue;
 			}
 		}
+		break;
 	}
+}
+
+void CommandLine::setConsoleColor(const ConsoleColor& color) {
+	std::cout << "\033[" << static_cast<int>(color) << "m";
+}
+
+std::string CommandLine::getColorString(const ConsoleColor& color) {
+	std::map<ConsoleColor, std::string> colorMap = {
+			{ConsoleColor::Default, "Default"},
+			{ConsoleColor::Black,   "Black"},
+			{ConsoleColor::Red,     "Red"},
+			{ConsoleColor::Green,   "Green"},
+			{ConsoleColor::Yellow,  "Yellow"},
+			{ConsoleColor::Blue,    "Blue"},
+			{ConsoleColor::Magenta, "Magenta"},
+			{ConsoleColor::Cyan,    "Cyan"},
+			{ConsoleColor::White,   "White"}
+	};
+	return colorMap[color];
 }
 
 void CommandLine::exit() {
@@ -69,9 +118,9 @@ void CommandLine::exit() {
 		std::cout << "[-] Error: Failed to close the connection properly." << std::endl;
 		return;
 	}
-	std::cout << "\033[1;32m" << "+========================+" << std::endl;
-	std::cout << "\033[1;32m" << "|        Goodbye!        |" << std::endl;
-	std::cout << "\033[1;32m" << "+========================+" << std::endl;
+	std::cout << "+=========================+" << std::endl;
+	std::cout << "|        Goodbye!         |" << std::endl;
+	std::cout << "+=========================+" << std::endl;
 }
 
 void CommandLine::help() {
@@ -93,9 +142,7 @@ void CommandLine::getList() {
 	}
 }
 
-void CommandLine::getFile(std::string& command) {
-	std::string filename = parseGetCommand(command);
-
+void CommandLine::getFile(std::string& filename) {
 	if (filename.empty()) {
 		std::cout << "[-] Error: The name of the file is empty." << std::endl;
 		return;
@@ -109,15 +156,6 @@ void CommandLine::getFile(std::string& command) {
 	} else if (bytes == -2) {
 		std::cout << "[-] Error: The file already exists in your directory." << std::endl;
 	}
-}
-
-std::string CommandLine::parseGetCommand(const std::string& command) {
-	size_t pos = command.find(' ');
-	if (pos == std::string::npos || pos == command.size() - 1) {
-		std::cout << "[-] Error: Invalid command format." << std::endl;
-		return "";
-	}
-	return command.substr(pos + 1);
 }
 
 int8_t CommandLine::processingCommand(const std::string& command) {

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <string>
 #include <thread>
+#include <numeric>
 #include <vector>
 #include <atomic>
 #include <mutex>
