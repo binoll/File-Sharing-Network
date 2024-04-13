@@ -58,7 +58,7 @@ int64_t Connection::getFile(const std::string& filename) {
 	int64_t size;
 	std::byte buffer[BUFFER_SIZE];
 	std::string response;
-	const std::string command_get = commands_client[1] + ":" + filename;
+	const std::string command_get = commands[1] + ":" + filename;
 
 	if (isFileExist(filename)) {
 		return -2;
@@ -107,7 +107,7 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 	int64_t total_bytes;
 	int64_t size;
 	std::string response;
-	const std::string& command_list = commands_client[0];
+	const std::string& command_list = commands[0];
 
 	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {
@@ -144,7 +144,7 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 }
 
 bool Connection::exit() {
-	const std::string& command_exit = commands_client[2];
+	const std::string& command_exit = commands[2];
 	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
 }
 
@@ -154,9 +154,9 @@ bool Connection::isConnection() const {
 
 void Connection::handleServer() {
 	int64_t bytes;
-	const std::string& command_list = commands_server[0];
-	const std::string& command_get = commands_server[1] + ':';
-	const std::string& command_exit = commands_server[2];
+	const std::string& command_list = commands[0];
+	const std::string& command_get = commands[1] + ':';
+	const std::string& command_exit = commands[2];
 
 	while (isConnection()) {
 		std::string command;
@@ -215,8 +215,10 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 	std::ifstream file(filename, std::ios::binary);
 	std::byte buffer[BUFFER_SIZE];
 	int64_t total_bytes = 0;
+	const std::string& command_error = commands[3];
 
 	if (!file.is_open()) {
+		sendMessage(socket, command_error, MSG_CONFIRM);
 		return -2;
 	}
 
@@ -230,7 +232,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 		if (bytes_sent < 0) {
 			return -1;
 		}
-
 		total_bytes += bytes_sent;
 	}
 	return total_bytes;
@@ -330,11 +331,11 @@ int64_t Connection::processResponse(std::string& message) {
 	return size;
 }
 
-bool Connection::checkConnection(int32_t fd) {
+bool Connection::checkConnection(int32_t socket) {
 	int32_t optval;
 	socklen_t optlen = sizeof(optval);
 
-	if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1 || optval != 0) {
+	if (getsockopt(socket, SOL_SOCKET, SO_ERROR, &optval, &optlen) == -1 || optval != 0) {
 		return false;
 	}
 	return true;

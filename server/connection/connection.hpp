@@ -35,6 +35,8 @@ class Connection {
 
 	int64_t sendFile(int32_t, const std::string&);
 
+	int64_t getFile();
+
 	std::vector<std::pair<int32_t, int32_t>> findFd(const std::string&);
 
 	std::vector<std::string> getListFiles();

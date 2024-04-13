@@ -113,9 +113,9 @@ bool Connection::checkConnection(int32_t socket) {
 
 void Connection::handleClients(int32_t client_socket_listen, int32_t client_socket_communicate) {
 	int64_t bytes;
-	const std::string& command_list = commands_client[0];
-	const std::string& command_get = commands_client[1] + ':';
-	const std::string& command_exit = commands_client[2];
+	const std::string& command_list = commands[0];
+	const std::string& command_get = commands[1] + ':';
+	const std::string& command_exit = commands[2];
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
 		std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
@@ -143,7 +143,6 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 				std::cout << "[+] Success: File sent successfully: " << filename << '.' << std::endl;
 			}
 		} else if (command == command_exit) {
-			std::cout << "[+] Success: Client disconnected." << std::endl;
 			break;
 		}
 	}
@@ -286,7 +285,6 @@ int64_t Connection::sendList(int32_t socket) {
 	if (bytes < 0) {
 		return -1;
 	}
-
 	return bytes + static_cast<int64_t>(message_size.size());
 }
 
@@ -294,6 +292,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	int64_t size = getSize(filename);
 	int64_t total_bytes = 0;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
+	const std::string& command_error = commands[3];
 
 	if (size == 0) {
 		int64_t bytes = sendMessage(socket, "", 0);
@@ -301,40 +300,45 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	if (sockets.empty()) {
+		sendMessage(socket, command_error, MSG_CONFIRM);
 		return -1;
 	}
 
-	for (const auto& socket_pair : sockets) {
-		int32_t client_socket_listen = socket_pair.first;
-		int32_t client_socket_communicate = socket_pair.second;
+	for (int64_t i = 0, offset = 0; total_bytes < size; ++i, offset += BUFFER_SIZE) {
+		int32_t client_socket_listen = sockets[i % sockets.size() + 1].first;
+		int32_t client_socket_communicate = sockets[i % sockets.size() + 1].second;
 
 		if (client_socket_listen == -1 || client_socket_communicate == -1) {
 			return -1;
 		}
 
-		for (int64_t offset = 0; offset < size; offset += BUFFER_SIZE) {
-			int64_t chunk_size = std::min(size - offset, static_cast<int64_t>(BUFFER_SIZE));
-			std::string message = commands_server[1] + ':' + std::to_string(offset) + ':' +
-					std::to_string(size) + ':' + filename;
-			std::byte buffer[BUFFER_SIZE];
+		std::byte buffer[BUFFER_SIZE];
+		int64_t chunk_size = std::min<int64_t>(size - offset, static_cast<int64_t>(BUFFER_SIZE));
+		std::string message = commands[1] + ':' + std::to_string(offset) + ':' +
+				std::to_string(size) + ':' + filename;
+		std::string response;
 
-			int64_t bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
-			if (bytes < 0) {
-				return -1;
-			}
-
-			bytes = receiveBytes(client_socket_listen, buffer, chunk_size, MSG_DONTWAIT);
-			if (bytes < 0) {
-				return -1;
-			}
-
-			bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
-			if (bytes < 0) {
-				return -1;
-			}
-
-			total_bytes += bytes;
+		int64_t bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
+		if (bytes < 0) {
+			return -1;
 		}
+
+		bytes = receiveBytes(client_socket_listen, buffer, chunk_size, MSG_WAITFORONE);
+		if (bytes < 0) {
+			return -1;
+		}
+
+		response.append(reinterpret_cast<char*>(buffer, bytes));
+		if (response == command_error) {
+			return -1;
+		}
+
+		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
+		if (bytes < 0) {
+			return -1;
+		}
+
+		total_bytes += bytes;
 	}
 	return total_bytes;
 }
@@ -427,41 +431,28 @@ void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string&
 }
 
 void Connection::removeFiles(std::pair<int32_t, int32_t> pair) {
-	std::string filename;
-	std::unordered_map<std::string, int64_t> file_count;
 	std::lock_guard<std::mutex> lock(mutex);
 	auto range = storage.equal_range(pair);
 
-	if (range.first != storage.end()) {
-		filename = range.first->second.filename;
-	}
+	for (auto it = range.first; it != range.second; ++it) {
+		std::string filename = it->second.filename;
+		uint64_t pos = filename.rfind('(');
 
-	storage.erase(range.first, range.second);
+		if (pos != std::string::npos) {
+			filename.erase(pos);
+		}
 
-	for (auto& entry : storage) {
-		file_count[entry.second.filename]++;
-	}
+		for (auto& entry : storage) {
+			if (entry.second.filename.find(filename) == 0) {
+				pos = entry.second.filename.rfind('(');
 
-	for (auto& it : storage) {
-		if (it.second.is_filename_changed && it.second.filename.find(filename) == 0) {
-			uint64_t pos_start = it.second.filename.rfind('(');
-
-			if (pos_start != std::string::npos) {
-				uint64_t pos_end = it.second.filename.rfind(')');
-
-				if (pos_end != std::string::npos) {
-					int64_t file_occurrences = file_count[it.second.filename];
-					std::string number = it.second.filename.substr(pos_start + 1, pos_end - pos_start - 1);
-					it.second.filename.replace(pos_start + 1, number.length(), std::to_string(file_occurrences));
-					--file_count[it.second.filename];
-				}
-
-				if (file_count[it.second.filename] == 1) {
-					it.second.filename.erase(pos_start);
+				if (pos != std::string::npos) {
+					entry.second.filename.erase(pos);
 				}
 			}
 		}
 	}
+	storage.erase(range.first, range.second);
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {

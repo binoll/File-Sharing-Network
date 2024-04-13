@@ -24,5 +24,4 @@
 
 #define BUFFER_SIZE 1024
 
-const std::vector<std::string> commands_client = {"list", "get", "exit", "error"};
-const std::vector<std::string> commands_server = {"list", "get", "exit", "error"};
+const std::vector<std::string> commands = {"list", "get", "exit", "error"};
