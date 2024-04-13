@@ -197,7 +197,7 @@ int64_t Connection::receiveBytes(int32_t socket, std::byte* buffer, int64_t size
 
 int64_t Connection::processResponse(std::string& message) {
 	int64_t size;
-	size_t pos;
+	uint64_t pos;
 
 	pos = message.find(':');
 	if (pos == std::string::npos) {
@@ -214,9 +214,9 @@ int64_t Connection::processResponse(std::string& message) {
 }
 
 bool Connection::synchronization(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	std::string message;
 	int64_t size_message;
 	int64_t bytes;
+	std::string message;
 
 	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
 	if (bytes < 0) {

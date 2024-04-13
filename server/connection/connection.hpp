@@ -21,7 +21,7 @@ class Connection {
 
 	int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	int64_t receiveMessage(int32_t, std::string&, int32_t flags);
+	int64_t receiveMessage(int32_t, std::string&, int32_t);
 
 	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
@@ -31,7 +31,7 @@ class Connection {
 
 	bool synchronization(int32_t, int32_t);
 
-	int64_t sendList(int32_t sockfd);
+	int64_t sendList(int32_t);
 
 	int64_t sendFile(int32_t, const std::string&);
 
