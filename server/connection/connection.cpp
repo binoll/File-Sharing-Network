@@ -415,6 +415,7 @@ void Connection::updateStorage() {
 					first->second.is_filename_changed = true;
 					second->second.is_filename_changed = true;
 					--file_count[first->second.filename];
+					--file_count[second->second.filename];
 				}
 			}
 		}
