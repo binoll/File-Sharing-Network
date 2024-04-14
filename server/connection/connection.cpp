@@ -116,6 +116,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1] + ':';
 	const std::string& command_exit = commands[2];
+	const std::string& command_error = commands[3];
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
 		std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
@@ -129,6 +130,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 		if (command == command_list) {
 			bytes = sendList(client_socket_listen);
 			if (bytes < 0) {
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the list of files." << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
@@ -138,6 +140,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 
 			bytes = sendFile(client_socket_listen, filename);
 			if (bytes < 0) {
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the file." << std::endl;
 			} else {
 				std::cout << "[+] Success: File sent successfully: " << filename << '.' << std::endl;
@@ -216,9 +219,10 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	int64_t size_message;
 	int64_t bytes;
 	std::string message;
+	const std::string& command_error = commands[3];
 
 	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
-	if (bytes < 0) {
+	if (bytes < 0 || message == command_error) {
 		return false;
 	}
 
@@ -256,7 +260,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 		}
 
 		bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
-		if (bytes < 0) {
+		if (bytes < 0 || message == command_error) {
 			return false;
 		}
 	}
@@ -267,8 +271,8 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 int64_t Connection::sendList(int32_t socket) {
 	int64_t bytes;
 	std::string message_size;
-	std::vector<std::string> files = getListFiles();
 	std::string list;
+	std::vector<std::string> files = getListFiles();
 
 	list = std::accumulate(files.begin(), files.end(), std::string(),
 	                       [](const std::string& a, const std::string& b) {
@@ -291,8 +295,13 @@ int64_t Connection::sendList(int32_t socket) {
 int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	int64_t size = getSize(filename);
 	int64_t total_bytes = 0;
+	std::string real_filename;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
 	const std::string& command_error = commands[3];
+
+	if (isFilenameChanged(filename)) {
+		real_filename = removeIndex(filename);
+	}
 
 	if (size == 0) {
 		int64_t bytes = sendMessage(socket, "", 0);
@@ -300,7 +309,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	if (sockets.empty()) {
-		sendMessage(socket, command_error, MSG_CONFIRM);
 		return -1;
 	}
 
@@ -315,7 +323,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		std::byte buffer[BUFFER_SIZE];
 		int64_t chunk_size = std::min<int64_t>(size - offset, static_cast<int64_t>(BUFFER_SIZE));
 		std::string message = commands[1] + ':' + std::to_string(offset) + ':' +
-				std::to_string(size) + ':' + filename;
+				std::to_string(size) + ':' + real_filename;
 		std::string response;
 
 		int64_t bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
@@ -324,7 +332,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		}
 
 		bytes = receiveBytes(client_socket_listen, buffer, chunk_size, MSG_WAITFORONE);
-		if (bytes < 0) {
+		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
 
@@ -347,9 +355,11 @@ std::vector<std::pair<int32_t, int32_t>> Connection::findFd(const std::string& f
 	std::vector<std::pair<int32_t, int32_t>> vector;
 	std::lock_guard<std::mutex> lock(mutex);
 
-	for (const auto& item : storage) {
-		if (item.second.filename == filename) {
-			vector.emplace_back(item.first);
+	for (const auto& entry : storage) {
+		std::string str;
+
+		if (entry.second.filename == filename) {
+			vector.emplace_back(entry.first);
 		}
 	}
 	return vector;
@@ -395,7 +405,7 @@ void Connection::updateStorage() {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (auto& entry : storage) {
-		file_count[entry.second.filename]++;
+		++file_count[entry.second.filename];
 	}
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
@@ -436,20 +446,11 @@ void Connection::removeFiles(std::pair<int32_t, int32_t> pair) {
 	auto range = storage.equal_range(pair);
 
 	for (auto it = range.first; it != range.second; ++it) {
-		std::string filename = it->second.filename;
-		uint64_t pos = filename.rfind('(');
-
-		if (pos != std::string::npos) {
-			filename.erase(pos);
-		}
+		std::string filename = removeIndex(it->second.filename);
 
 		for (auto& entry : storage) {
 			if (entry.second.filename.find(filename) == 0) {
-				pos = entry.second.filename.rfind('(');
-
-				if (pos != std::string::npos) {
-					entry.second.filename.erase(pos);
-				}
+				entry.second.filename = removeIndex(entry.second.filename);
 			}
 		}
 	}
@@ -463,4 +464,22 @@ void Connection::split(const std::string& str, char delim, std::vector<std::stri
 	while (std::getline(tokenStream, token, delim)) {
 		tokens.push_back(token);
 	}
+}
+
+std::string Connection::removeIndex(std::string filename) {
+	uint64_t pos = filename.rfind('(');
+
+	if (pos != std::string::npos) {
+		filename.erase(pos);
+	}
+	return filename;
+}
+
+bool Connection::isFilenameChanged(const std::string& filename) {
+	for (auto& entry : storage) {
+		if (entry.second.filename == filename) {
+			return entry.second.is_filename_changed;
+		}
+	}
+	return false;
 }

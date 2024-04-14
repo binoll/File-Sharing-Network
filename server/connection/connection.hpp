@@ -35,8 +35,6 @@ class Connection {
 
 	int64_t sendFile(int32_t, const std::string&);
 
-	int64_t getFile();
-
 	std::vector<std::pair<int32_t, int32_t>> findFd(const std::string&);
 
 	std::vector<std::string> getListFiles();
@@ -50,6 +48,10 @@ class Connection {
 	void removeFiles(std::pair<int32_t, int32_t>);
 
 	static void split(const std::string&, char, std::vector<std::string>&);
+
+	static std::string removeIndex(std::string);
+
+	bool isFilenameChanged(const std::string&);
 
 	int32_t socket_listen { };
 	int32_t socket_communicate { };
