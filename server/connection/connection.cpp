@@ -218,7 +218,7 @@ int64_t Connection::processResponse(std::string& message) {
 }
 
 bool Connection::synchronization(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	int64_t size_message;
+	int64_t message_size;
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
@@ -228,9 +228,9 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 		return false;
 	}
 
-	size_message = processResponse(message);
+	message_size = processResponse(message);
 
-	while (size_message > 0) {
+	while (message_size > 0) {
 		std::istringstream iss(message);
 
 		while (iss >> message) {
@@ -256,8 +256,9 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			}
 		}
 
-		size_message -= bytes;
-		if (size_message <= 0) {
+		message_size -= bytes;
+
+		if (message_size <= 0) {
 			break;
 		}
 
@@ -280,7 +281,12 @@ int64_t Connection::sendList(int32_t socket) {
 		                       return a + b + ' ';
 	                       });
 
-	message_size = std::to_string(list.size() + 1) + ':';
+	try {
+		message_size = std::to_string(list.size()) + ':';
+	} catch (const std::exception& err) {
+		return -1;
+	}
+
 	bytes = sendMessage(socket, message_size, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
@@ -294,26 +300,36 @@ int64_t Connection::sendList(int32_t socket) {
 }
 
 int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
-	int64_t size = getSize(filename);
+	int64_t message_size = getSize(filename);
+	int64_t bytes;
 	int64_t total_bytes = 0;
 	std::string real_filename;
+	std::string message;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
 	const std::string& command_error = commands[3];
 
 	if (isFilenameChanged(filename)) {
 		real_filename = removeIndex(filename);
+	} else {
+		real_filename = filename;
 	}
 
-	if (size == 0) {
-		int64_t bytes = sendMessage(socket, " ", MSG_CONFIRM);
-		return (bytes < 0) ? -1 : 0;
+	try {
+		message = std::to_string(message_size) + ':';
+	} catch (const std::exception& err) {
+		return -1;
+	}
+
+	bytes = sendMessage(socket, message, MSG_CONFIRM);
+	if (bytes < 0) {
+		return -1;
 	}
 
 	if (sockets.empty()) {
 		return -1;
 	}
 
-	for (int64_t i = 0, offset = 0; total_bytes < size; ++i, offset += BUFFER_SIZE) {
+	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += BUFFER_SIZE) {
 		int32_t client_socket_listen = sockets[i % sockets.size()].first;
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 
@@ -323,12 +339,12 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		}
 
 		std::byte buffer[BUFFER_SIZE];
-		int64_t chunk_size = std::min<int64_t>(size - offset, static_cast<int64_t>(BUFFER_SIZE));
-		std::string message = commands[1] + ':' + std::to_string(offset) + ':' +
-				std::to_string(size) + ':' + real_filename;
+		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
+		message = commands[1] + ':' + std::to_string(offset) + ':' +
+				std::to_string(chunk_size) + ':' + real_filename;
 		std::string response;
 
-		int64_t bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
+		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -412,11 +428,6 @@ void Connection::updateStorage() {
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
-			if (first->second.hash == second->second.hash &&
-					first->second.filename != second->second.filename) {
-				second->second.filename = first->second.filename;
-			}
-
 			if (first->second.hash != second->second.hash &&
 					first->second.filename == second->second.filename) {
 				int64_t file_occurrences = file_count[first->second.filename];

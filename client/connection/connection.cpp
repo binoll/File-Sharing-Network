@@ -55,10 +55,10 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 int64_t Connection::getFile(const std::string& filename) {
 	int64_t total_bytes;
 	int64_t bytes;
-	int64_t size;
+	int64_t message_size;
 	std::byte buffer[BUFFER_SIZE];
 	std::string message;
-	const std::string command_get = commands[1] + ":" + filename;
+	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
 
 	if (isFileExist(filename)) {
@@ -73,8 +73,6 @@ int64_t Connection::getFile(const std::string& filename) {
 	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
 		return -1;
-	} else if (bytes == 0) {
-		return 0;
 	}
 
 	std::ofstream file(filename, std::ios::binary);
@@ -82,23 +80,27 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -1;
 	}
 
-	total_bytes = bytes;
-	size = processResponse(message);
+	message_size = processResponse(message);
+	file.write(message.data(), static_cast<int64_t>(message.size()));
+	message_size -= static_cast<int64_t>(message.size());
+	total_bytes = static_cast<int64_t>(message.size());
 
-	if (!message.empty()) {
-		file.write(reinterpret_cast<char*>(message.data()), static_cast<int64_t>(message.size()));
-	}
-
-	while (size > 0) {
-		int64_t bytes_to_receive = (size > BUFFER_SIZE) ? BUFFER_SIZE : size;
+	while (message_size > 0) {
+		int64_t bytes_to_receive = message_size - total_bytes > BUFFER_SIZE ? BUFFER_SIZE : message_size - total_bytes;
 
 		bytes = receiveBytes(socket_communicate, buffer, bytes_to_receive, MSG_WAITFORONE);
-		if (bytes < 0) {
+		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
+
 		file.write(reinterpret_cast<char*>(buffer), bytes);
-		size -= bytes;
+
+		message_size -= bytes;
 		total_bytes += bytes;
+
+		if (message_size <= 0) {
+			break;
+		}
 	}
 	return total_bytes;
 }
@@ -106,7 +108,7 @@ int64_t Connection::getFile(const std::string& filename) {
 int64_t Connection::getList(std::vector<std::string>& list) {
 	int64_t bytes;
 	int64_t total_bytes;
-	int64_t size;
+	int64_t message_size;
 	std::string message;
 	const std::string& command_list = commands[0];
 	const std::string& command_error = commands[3];
@@ -121,10 +123,10 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 		return -1;
 	}
 
-	total_bytes = 0;
-	size = processResponse(message);
+	message_size = processResponse(message);
+	total_bytes = message_size;
 
-	while (true) {
+	while (message_size > 0) {
 		std::istringstream iss(message);
 		std::string filename;
 
@@ -132,7 +134,10 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 			list.emplace_back(filename);
 		}
 
-		if ((size -= bytes) <= 0) {
+		message_size -= static_cast<int64_t>(message.size());
+		total_bytes += static_cast<int64_t>(message.size());
+
+		if (message_size <= 0) {
 			break;
 		}
 
@@ -140,7 +145,6 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
-		total_bytes += bytes;
 	}
 	return total_bytes;
 }
@@ -235,11 +239,11 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 		const int64_t bytes_to_read = std::min<int64_t>(BUFFER_SIZE, size - total_bytes);
 		file.read(reinterpret_cast<char*>(buffer), bytes_to_read);
 
-		const int64_t bytes_sent = sendBytes(socket, buffer, bytes_to_read, MSG_CONFIRM);
-		if (bytes_sent < 0) {
+		const int64_t bytes = sendBytes(socket, buffer, bytes_to_read, MSG_CONFIRM);
+		if (bytes < 0) {
 			return -1;
 		}
-		total_bytes += bytes_sent;
+		total_bytes += bytes;
 	}
 	return total_bytes;
 }
@@ -263,8 +267,7 @@ int64_t Connection::sendList(int32_t socket) {
 		data += oss.str();
 	}
 
-	bytes = static_cast<int64_t>(data.size() + std::to_string(data.size() + ':').size());
-	message_size = std::to_string(bytes) + ':';
+	message_size = std::to_string(data.size()) + ':';
 
 	bytes = sendMessage(socket, message_size, MSG_CONFIRM);
 	if (bytes < 0) {
@@ -334,6 +337,7 @@ int64_t Connection::processResponse(std::string& message) {
 	} catch (const std::exception& err) {
 		return -1;
 	}
+
 	message = message.substr(pos + 1);
 	return size;
 }

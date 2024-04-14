@@ -149,7 +149,7 @@ void CommandLine::getFile(std::string& filename) {
 	}
 
 	int64_t bytes = connection.getFile(filename);
-	if (bytes > 0) {
+	if (bytes >= 0) {
 		std::cout << "[+] Success: The " << '\"' << filename << '\"' << " has been downloaded." << std::endl;
 	} else if (bytes == -1) {
 		std::cout << "[-] Error: Failed to download the file." << std::endl;
