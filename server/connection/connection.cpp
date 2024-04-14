@@ -123,6 +123,8 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 		return;
 	}
 
+	updateStorage();
+
 	while (isConnect(client_socket_listen, client_socket_communicate)) {
 		std::string command;
 		receiveMessage(client_socket_listen, command, MSG_DONTWAIT);
@@ -264,7 +266,6 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			return false;
 		}
 	}
-	updateStorage();
 	return true;
 }
 
@@ -313,10 +314,11 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	for (int64_t i = 0, offset = 0; total_bytes < size; ++i, offset += BUFFER_SIZE) {
-		int32_t client_socket_listen = sockets[i % sockets.size() + 1].first;
-		int32_t client_socket_communicate = sockets[i % sockets.size() + 1].second;
+		int32_t client_socket_listen = sockets[i % sockets.size()].first;
+		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 
-		if (client_socket_listen == -1 || client_socket_communicate == -1) {
+		if (client_socket_listen == -1 || client_socket_communicate == -1 ||
+				socket == client_socket_communicate) {
 			return -1;
 		}
 
@@ -331,7 +333,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -1;
 		}
 
-		bytes = receiveBytes(client_socket_listen, buffer, chunk_size, MSG_WAITFORONE);
+		bytes = receiveBytes(socket, buffer, chunk_size, MSG_WAITFORONE);
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}

@@ -65,11 +65,6 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -2;
 	}
 
-	std::ofstream file(filename, std::ios::binary);
-	if (!file.is_open()) {
-		return -1;
-	}
-
 	bytes = sendMessage(socket_communicate, command_get, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
@@ -80,6 +75,11 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -1;
 	} else if (bytes == 0) {
 		return 0;
+	}
+
+	std::ofstream file(filename, std::ios::binary);
+	if (!file.is_open()) {
+		return -1;
 	}
 
 	total_bytes = bytes;
@@ -163,7 +163,7 @@ void Connection::handleServer() {
 
 	while (isConnection()) {
 		std::string command;
-		receiveMessage(socket_listen, command, MSG_DONTWAIT);
+		receiveMessage(socket_listen, command, MSG_WAITFORONE);
 
 		if (command == command_list) {
 			bytes = sendList(socket_communicate);
