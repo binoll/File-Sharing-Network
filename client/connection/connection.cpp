@@ -163,12 +163,13 @@ void Connection::handleServer() {
 
 	while (isConnection()) {
 		std::string command;
-		receiveMessage(socket_listen, command, MSG_WAITFORONE);
+		receiveMessage(socket_listen, command, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			bytes = sendList(socket_communicate);
+			bytes = sendList(socket_listen);
 			if (bytes < 0) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				std::cout << std::endl << "[-] Error: Failed send list of files." << std::endl;
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				continue;
 			}
 		} else if (command.substr(0, 4) == command_get) {
@@ -181,8 +182,8 @@ void Connection::handleServer() {
 			}
 
 			if (tokens.size() < 3) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
-				std::cout << "[-] Error: Invalid command format." << std::endl;
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				continue;
 			}
 
@@ -194,8 +195,8 @@ void Connection::handleServer() {
 				size = static_cast<int64_t>(std::stoull(tokens[1]));
 				stream << tokens[2];
 			} catch (const std::exception& err) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
-				std::cout << "[-] Error: Invalid command format." << std::endl;
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				return;
 			}
 
@@ -204,13 +205,13 @@ void Connection::handleServer() {
 			}
 			const std::string filename = stream.str();
 
-			bytes = sendFile(socket_communicate, filename, offset, size);
+			bytes = sendFile(socket_listen, filename, offset, size);
 			if (bytes == -1) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
-				std::cout << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				std::cout << std::endl << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
 			} else if (bytes == -2) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
-				std::cout << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				std::cout << std::endl << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
 			}
 			continue;
 		} else if (command == command_exit) {

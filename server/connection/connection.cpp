@@ -143,9 +143,9 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			bytes = sendFile(client_socket_listen, filename);
 			if (bytes < 0) {
 				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
-				std::cout << "[-] Error: Failed send the file." << std::endl;
+				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
 			} else {
-				std::cout << "[+] Success: File sent successfully: " << filename << '.' << std::endl;
+				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
 			}
 		} else if (command == command_exit) {
 			break;
@@ -305,7 +305,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	if (size == 0) {
-		int64_t bytes = sendMessage(socket, "", 0);
+		int64_t bytes = sendMessage(socket, " ", MSG_CONFIRM);
 		return (bytes < 0) ? -1 : 0;
 	}
 
@@ -318,7 +318,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 
 		if (client_socket_listen == -1 || client_socket_communicate == -1 ||
-				socket == client_socket_communicate) {
+				socket == client_socket_communicate || socket == client_socket_listen) {
 			return -1;
 		}
 
@@ -333,12 +333,12 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -1;
 		}
 
-		bytes = receiveBytes(socket, buffer, chunk_size, MSG_WAITFORONE);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
 
-		response.append(reinterpret_cast<char*>(buffer, bytes));
+		response = std::string(reinterpret_cast<char*>(buffer), bytes);
 		if (response == command_error) {
 			return -1;
 		}
@@ -422,8 +422,8 @@ void Connection::updateStorage() {
 				int64_t file_occurrences = file_count[first->second.filename];
 
 				if (file_occurrences > 1) {
-					first->second.filename += '(' + std::to_string(file_occurrences) + ')';
-					second->second.filename += '(' + std::to_string(file_occurrences - 1) + ')';
+					first->second.filename += '(' + std::to_string(file_occurrences - 1) + ')';
+					second->second.filename += '(' + std::to_string(file_occurrences) + ')';
 					first->second.is_filename_changed = true;
 					second->second.is_filename_changed = true;
 					--file_count[first->second.filename];
