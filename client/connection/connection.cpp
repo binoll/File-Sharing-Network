@@ -57,8 +57,9 @@ int64_t Connection::getFile(const std::string& filename) {
 	int64_t bytes;
 	int64_t size;
 	std::byte buffer[BUFFER_SIZE];
-	std::string response;
+	std::string message;
 	const std::string command_get = commands[1] + ":" + filename;
+	const std::string& command_error = commands[3];
 
 	if (isFileExist(filename)) {
 		return -2;
@@ -74,18 +75,18 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
-	if (bytes < 0) {
+	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+	if (bytes < 0 || message == command_error) {
 		return -1;
 	} else if (bytes == 0) {
 		return 0;
 	}
 
 	total_bytes = bytes;
-	size = processResponse(response);
+	size = processResponse(message);
 
-	if (!response.empty()) {
-		file.write(reinterpret_cast<char*>(response.data()), static_cast<int64_t>(response.size()));
+	if (!message.empty()) {
+		file.write(reinterpret_cast<char*>(message.data()), static_cast<int64_t>(message.size()));
 	}
 
 	while (size > 0) {
@@ -106,24 +107,25 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 	int64_t bytes;
 	int64_t total_bytes;
 	int64_t size;
-	std::string response;
+	std::string message;
 	const std::string& command_list = commands[0];
+	const std::string& command_error = commands[3];
 
 	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
-	if (bytes < 0) {
+	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+	if (bytes < 0 || message == command_error) {
 		return -1;
 	}
 
 	total_bytes = 0;
-	size = processResponse(response);
+	size = processResponse(message);
 
 	while (true) {
-		std::istringstream iss(response);
+		std::istringstream iss(message);
 		std::string filename;
 
 		while (std::getline(iss, filename, ' ')) {
@@ -134,8 +136,8 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 			break;
 		}
 
-		bytes = receiveMessage(socket_communicate, response, MSG_WAITFORONE);
-		if (bytes < 0) {
+		bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
 		total_bytes += bytes;
@@ -157,6 +159,7 @@ void Connection::handleServer() {
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1] + ':';
 	const std::string& command_exit = commands[2];
+	const std::string& command_error = commands[3];
 
 	while (isConnection()) {
 		std::string command;
@@ -165,6 +168,7 @@ void Connection::handleServer() {
 		if (command == command_list) {
 			bytes = sendList(socket_communicate);
 			if (bytes < 0) {
+				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				continue;
 			}
 		} else if (command.substr(0, 4) == command_get) {
@@ -177,6 +181,7 @@ void Connection::handleServer() {
 			}
 
 			if (tokens.size() < 3) {
+				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Invalid command format." << std::endl;
 				continue;
 			}
@@ -189,6 +194,7 @@ void Connection::handleServer() {
 				size = static_cast<int64_t>(std::stoull(tokens[1]));
 				stream << tokens[2];
 			} catch (const std::exception& err) {
+				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Invalid command format." << std::endl;
 				return;
 			}
@@ -200,8 +206,10 @@ void Connection::handleServer() {
 
 			bytes = sendFile(socket_communicate, filename, offset, size);
 			if (bytes == -1) {
+				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
 			} else if (bytes == -2) {
+				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
 			}
 			continue;
@@ -215,10 +223,8 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 	std::ifstream file(filename, std::ios::binary);
 	std::byte buffer[BUFFER_SIZE];
 	int64_t total_bytes = 0;
-	const std::string& command_error = commands[3];
 
 	if (!file.is_open()) {
-		sendMessage(socket, command_error, MSG_CONFIRM);
 		return -2;
 	}
 
