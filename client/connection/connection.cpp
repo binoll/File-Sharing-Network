@@ -165,7 +165,7 @@ bool Connection::exit() {
 	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
 }
 
-bool Connection::isConnection()  {
+bool Connection::isConnection() {
 	std::lock_guard<std::mutex> lock(mutex_socket);
 	return checkConnection(socket_communicate) && checkConnection(socket_listen);
 }
