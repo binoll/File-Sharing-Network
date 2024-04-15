@@ -9,11 +9,10 @@ Connection::Connection(std::string dir) : dir(std::move(dir)) {
 }
 
 Connection::~Connection() {
-	std::lock_guard<std::mutex> lock(mutex_socket);
-
 	if (thread.joinable()) {
 		thread.join();
 	}
+	std::lock_guard<std::mutex> lock(mutex_socket);
 	close(socket_listen);
 	close(socket_communicate);
 }
