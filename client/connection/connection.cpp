@@ -12,7 +12,6 @@ Connection::~Connection() {
 	if (thread.joinable()) {
 		thread.join();
 	}
-	std::lock_guard<std::mutex> lock(mutex_socket);
 	close(socket_listen);
 	close(socket_communicate);
 }
@@ -186,7 +185,6 @@ void Connection::handleServer() {
 			if (bytes < 0) {
 				std::cout << std::endl << "[-] Error: Failed send list of files." << std::endl;
 				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
-				continue;
 			}
 		} else if (command.substr(0, 4) == command_get) {
 			std::istringstream iss(command.substr(4));
@@ -230,7 +228,6 @@ void Connection::handleServer() {
 				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
 			}
-			continue;
 		} else if (command == command_exit) {
 			break;
 		}
@@ -241,6 +238,8 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 	std::ifstream file(filename, std::ios::binary);
 	std::byte buffer[BUFFER_SIZE];
 	int64_t total_bytes = 0;
+
+	waiting(mutex_socket);
 
 	if (!file.is_open()) {
 		return -2;
@@ -258,6 +257,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 		}
 		total_bytes += bytes;
 	}
+	mutex_socket.unlock();
 	return total_bytes;
 }
 
@@ -267,8 +267,9 @@ int64_t Connection::sendList(int32_t socket) {
 	std::string data;
 	std::string message_size;
 
-	total_bytes = 0;
+	waiting(mutex_socket);
 
+	total_bytes = 0;
 	auto files = getListFiles();
 
 	for (const auto& file : files) {
@@ -292,6 +293,7 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 	total_bytes += bytes;
+	mutex_socket.unlock();
 	return total_bytes;
 }
 
@@ -424,4 +426,16 @@ bool Connection::isFileExist(const std::string& filename) {
 		std::cout << "[-] Error: " << err.what() << '.' << std::endl;
 	}
 	return false;
+}
+
+void Connection::waiting(std::mutex& mutex) {
+	const char chars[] = {'\\', '|', '/', '-'};
+	uint64_t i = 0;
+
+	while (!mutex.try_lock()) {
+		std::cout << std::endl << "[*] Wait: Processing... " << chars[i % 4] << "\r" << std::flush;
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		++i;
+	}
+	std::cout << std::endl;
 }

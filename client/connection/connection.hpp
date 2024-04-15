@@ -31,13 +31,13 @@ class Connection {
  private:
 	void handleServer();
 
-	static int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
+	int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
 
-	int64_t sendList(int32_t sockfd);
+	int64_t sendList(int32_t);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	static int64_t receiveMessage(int32_t, std::string&, int32_t flags);
+	static int64_t receiveMessage(int32_t, std::string&, int32_t);
 
 	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
@@ -54,6 +54,8 @@ class Connection {
 	static std::string calculateFileHash(const std::string&);
 
 	bool isFileExist(const std::string&);
+
+	static void waiting(std::mutex&);
 
 	std::string dir;
 	int32_t socket_listen;
