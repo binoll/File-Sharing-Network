@@ -26,22 +26,22 @@ class Connection {
 
 	bool exit();
 
-	[[nodiscard]] bool isConnection() const;
+	[[nodiscard]] bool isConnection();
 
  private:
 	void handleServer();
 
-	int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
+	static int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
 
 	int64_t sendList(int32_t sockfd);
 
-	int64_t sendMessage(int32_t, const std::string&, int32_t);
+	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	int64_t receiveMessage(int32_t, std::string&, int32_t flags);
+	static int64_t receiveMessage(int32_t, std::string&, int32_t flags);
 
-	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
-	int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -51,7 +51,7 @@ class Connection {
 
 	static uint64_t getFileSize(const std::string&);
 
-	std::string calculateFileHash(const std::string&);
+	static std::string calculateFileHash(const std::string&);
 
 	bool isFileExist(const std::string&);
 
@@ -61,5 +61,6 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;
-	std::mutex mutex;
+	std::mutex mutex_socket;
+	std::mutex mutex_dir;
 };

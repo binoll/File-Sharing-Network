@@ -10,7 +10,7 @@ class Connection {
 
 	void waitConnection();
 
-	static bool isConnect(int32_t, int32_t);
+	bool isConnect(int32_t, int32_t);
 
  private:
 	static int32_t getPort();
@@ -19,13 +19,13 @@ class Connection {
 
 	void handleClients(int32_t, int32_t);
 
-	int64_t sendMessage(int32_t, const std::string&, int32_t);
+	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	int64_t receiveMessage(int32_t, std::string&, int32_t);
+	static int64_t receiveMessage(int32_t, std::string&, int32_t);
 
-	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
-	int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -58,5 +58,6 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
-	std::mutex mutex;
+	std::mutex mutex_socket;
+	std::mutex mutex_storage;
 };
