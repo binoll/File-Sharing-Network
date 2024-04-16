@@ -62,8 +62,6 @@ int64_t Connection::getFile(const std::string& filename) {
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
 
-	std::cout << "[*] Wait: The server is processing the request" << std::endl;
-
 	if (isFileExist(filename)) {
 		return -2;
 	}
@@ -117,8 +115,6 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 	std::string message;
 	const std::string& command_list = commands[0];
 	const std::string& command_error = commands[3];
-
-	std::cout << "[*] Wait: The server is processing the request" << std::endl;
 
 	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {

@@ -135,6 +135,7 @@ void CommandLine::getList() {
 	std::vector<std::string> list;
 	connection.getList(list);
 
+	std::cout << "[*] Wait: The server is processing the request..." << std::endl;
 	std::cout << "[+] Success. List of files:" << std::endl;
 
 	for (const auto& item : list) {
@@ -147,6 +148,8 @@ void CommandLine::getFile(std::string& filename) {
 		std::cout << "[-] Error: The name of the file is empty." << std::endl;
 		return;
 	}
+
+	std::cout << "[*] Wait: The server is processing the request..." << std::endl;
 
 	int64_t bytes = connection.getFile(filename);
 	if (bytes >= 0) {
