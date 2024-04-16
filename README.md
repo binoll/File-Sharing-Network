@@ -27,10 +27,16 @@ cmake --build .
 ```
 
 ## Run
-To start the server:
+To start the multithreaded server:
 
 ```bash
-./build/server/server
+./build/multithreaded_server/multithreaded_server
+```
+
+To start the asynchronous server:
+
+```bash
+./build/asynchronous_server/asynchronous_server
 ```
 
 To start the client:
