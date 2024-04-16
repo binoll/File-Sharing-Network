@@ -14,7 +14,7 @@ and start downloading any of them through the server. If
 the same downloaded file is located on 2 or more clients,
 the download is carried out simultaneously from all clients, alternating blocks by
 1kb. Thus, each client gives the file to the network only partially. Commands in the user console: **list** - 
-list of shared files, **get "filename"** - download the "filename", **exit** - exit from app,
+list of shared files, **get "file_name"** - download the "file_name", **exit** - exit from app,
 **help** - print possible commands.
 
 ## Build
