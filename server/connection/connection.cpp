@@ -9,7 +9,7 @@ Connection::Connection() {
 }
 
 Connection::~Connection() {
-	std::lock_guard<std::mutex> lock(mutex_socket);
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 	close(socket_listen);
 	close(socket_communicate);
 }
@@ -75,7 +75,7 @@ void Connection::waitConnection() {
 }
 
 bool Connection::isConnect(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	std::lock_guard<std::mutex> lock(mutex_socket);
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	return checkConnection(client_socket_listen) && checkConnection(client_socket_communicate);
 }
@@ -223,7 +223,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket);
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
@@ -277,7 +277,7 @@ int64_t Connection::sendList(int32_t socket) {
 	std::string message_size;
 	std::string list;
 	std::vector<std::string> files = getListFiles();
-	std::lock_guard<std::mutex> lock(mutex_socket);
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	list = std::accumulate(files.begin(), files.end(), std::string(),
 	                       [](const std::string& a, const std::string& b) {
@@ -310,7 +310,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	std::string message;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket);
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	if (isFilenameChanged(filename)) {
 		real_filename = removeIndex(filename);

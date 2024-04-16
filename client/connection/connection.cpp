@@ -3,6 +3,7 @@
 Connection::Connection(std::string dir) : dir(std::move(dir)) {
 	socket_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
 	if (socket_listen < 0 || socket_communicate < 0) {
 		std::cout << "[-] Error: Failed to create socket." << std::endl;
 	}
@@ -60,7 +61,6 @@ int64_t Connection::getFile(const std::string& filename) {
 	std::string message;
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket);
 
 	if (isFileExist(filename)) {
 		return -2;
@@ -71,7 +71,7 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_listen, message, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
 		return -1;
 	}
@@ -91,7 +91,7 @@ int64_t Connection::getFile(const std::string& filename) {
 	total_bytes = static_cast<int64_t>(message.size());
 
 	while (message_size > 0) {
-		bytes = receiveBytes(socket_listen, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+		bytes = receiveBytes(socket_communicate, buffer, BUFFER_SIZE, MSG_WAITFORONE);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -115,14 +115,13 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 	std::string message;
 	const std::string& command_list = commands[0];
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket);
 
 	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_listen, message, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
 		return -1;
 	}
@@ -149,7 +148,7 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 			break;
 		}
 
-		bytes = receiveMessage(socket_listen, message, MSG_WAITFORONE);
+		bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
@@ -159,13 +158,11 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 
 bool Connection::exit() {
 	const std::string& command_exit = commands[2];
-	std::lock_guard<std::mutex> lock(mutex_socket);
 
 	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
 }
 
-bool Connection::isConnection() {
-	std::lock_guard<std::mutex> lock(mutex_socket);
+bool Connection::isConnection() const {
 	return checkConnection(socket_communicate) && checkConnection(socket_listen);
 }
 
@@ -181,10 +178,10 @@ void Connection::handleServer() {
 		receiveMessage(socket_listen, command, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			bytes = sendList(socket_communicate);
+			bytes = sendList(socket_listen);
 			if (bytes < 0) {
 				std::cout << std::endl << "[-] Error: Failed send list of files." << std::endl;
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 			}
 		} else if (command.substr(0, 4) == command_get) {
 			std::istringstream iss(command.substr(4));
@@ -196,7 +193,7 @@ void Connection::handleServer() {
 			}
 
 			if (tokens.size() < 3) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				continue;
 			}
@@ -209,7 +206,7 @@ void Connection::handleServer() {
 				size = static_cast<int64_t>(std::stoull(tokens[1]));
 				stream << tokens[2];
 			} catch (const std::exception& err) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				return;
 			}
@@ -220,12 +217,12 @@ void Connection::handleServer() {
 
 			const std::string filename = stream.str();
 
-			bytes = sendFile(socket_communicate, filename, offset, size);
+			bytes = sendFile(socket_listen, filename, offset, size);
 			if (bytes == -1) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
 			} else if (bytes == -2) {
-				sendMessage(socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
 			}
 		} else if (command == command_exit) {
@@ -238,8 +235,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 	std::ifstream file(filename, std::ios::binary);
 	std::byte buffer[BUFFER_SIZE];
 	int64_t total_bytes = 0;
-
-	waiting(mutex_socket);
 
 	if (!file.is_open()) {
 		return -2;
@@ -257,7 +252,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 		}
 		total_bytes += bytes;
 	}
-	mutex_socket.unlock();
 	return total_bytes;
 }
 
@@ -266,8 +260,6 @@ int64_t Connection::sendList(int32_t socket) {
 	int64_t total_bytes;
 	std::string data;
 	std::string message_size;
-
-	waiting(mutex_socket);
 
 	total_bytes = 0;
 	auto files = getListFiles();
@@ -293,7 +285,6 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 	total_bytes += bytes;
-	mutex_socket.unlock();
 	return total_bytes;
 }
 
@@ -324,6 +315,7 @@ int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t
 
 int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
+	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	bytes = send(socket, buffer, size, flags);
 	return bytes;
@@ -331,6 +323,7 @@ int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t s
 
 int64_t Connection::receiveBytes(int32_t socket, std::byte* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
+	std::lock_guard<std::mutex> lock(mutex_socket_listen);
 
 	bytes = recv(socket, buffer, size, flags);
 	return bytes;
@@ -426,16 +419,4 @@ bool Connection::isFileExist(const std::string& filename) {
 		std::cout << "[-] Error: " << err.what() << '.' << std::endl;
 	}
 	return false;
-}
-
-void Connection::waiting(std::mutex& mutex) {
-	const char chars[] = {'\\', '|', '/', '-'};
-	uint64_t i = 0;
-
-	while (!mutex.try_lock()) {
-		std::cout << std::endl << "[*] Wait: Processing... " << chars[i % 4] << "\r" << std::flush;
-		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-		++i;
-	}
-	std::cout << std::endl;
 }

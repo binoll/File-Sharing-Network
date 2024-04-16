@@ -26,7 +26,7 @@ class Connection {
 
 	bool exit();
 
-	[[nodiscard]] bool isConnection();
+	[[nodiscard]] bool isConnection() const;
 
  private:
 	void handleServer();
@@ -35,13 +35,13 @@ class Connection {
 
 	int64_t sendList(int32_t);
 
-	static int64_t sendMessage(int32_t, const std::string&, int32_t);
+	int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	static int64_t receiveMessage(int32_t, std::string&, int32_t);
+	int64_t receiveMessage(int32_t, std::string&, int32_t);
 
-	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
-	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -55,14 +55,13 @@ class Connection {
 
 	bool isFileExist(const std::string&);
 
-	static void waiting(std::mutex&);
-
 	std::string dir;
 	int32_t socket_listen;
 	int32_t socket_communicate;
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;
-	std::mutex mutex_socket;
+	std::mutex mutex_socket_communicate;
+	std::mutex mutex_socket_listen;
 	std::mutex mutex_dir;
 };
