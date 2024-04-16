@@ -22,26 +22,26 @@ class Connection {
 
 	int64_t getFile(const std::string&);
 
-	int64_t getList(std::vector<std::string>&);
+	int64_t getList(std::vector<std::string>&) const;
 
-	bool exit();
+	[[nodiscard]] bool exit() const;
 
 	[[nodiscard]] bool isConnection() const;
 
  private:
 	void handleServer();
 
-	int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
+	static int64_t sendFile(int32_t, const std::string&, int64_t, int64_t);
 
 	int64_t sendList(int32_t);
 
-	int64_t sendMessage(int32_t, const std::string&, int32_t);
+	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
-	int64_t receiveMessage(int32_t, std::string&, int32_t);
+	static int64_t receiveMessage(int32_t, std::string&, int32_t);
 
-	int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
 
-	int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -61,7 +61,5 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;
-	std::mutex mutex_socket_communicate;
-	std::mutex mutex_socket_listen;
 	std::mutex mutex_dir;
 };

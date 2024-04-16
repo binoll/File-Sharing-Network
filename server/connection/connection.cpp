@@ -9,7 +9,6 @@ Connection::Connection() {
 }
 
 Connection::~Connection() {
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 	close(socket_listen);
 	close(socket_communicate);
 }
@@ -75,8 +74,6 @@ void Connection::waitConnection() {
 }
 
 bool Connection::isConnect(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
-
 	return checkConnection(client_socket_listen) && checkConnection(client_socket_communicate);
 }
 
@@ -133,9 +130,9 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 		receiveMessage(client_socket_listen, command, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			bytes = sendList(client_socket_communicate);
+			bytes = sendList(client_socket_listen);
 			if (bytes < 0) {
-				sendMessage(client_socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the list of files." << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
@@ -143,9 +140,9 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
 
-			bytes = sendFile(client_socket_communicate, filename);
+			bytes = sendFile(client_socket_listen, filename);
 			if (bytes < 0) {
-				sendMessage(client_socket_communicate, command_error, MSG_CONFIRM);
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
 			} else {
 				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
@@ -223,7 +220,6 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
@@ -277,7 +273,6 @@ int64_t Connection::sendList(int32_t socket) {
 	std::string message_size;
 	std::string list;
 	std::vector<std::string> files = getListFiles();
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	list = std::accumulate(files.begin(), files.end(), std::string(),
 	                       [](const std::string& a, const std::string& b) {
@@ -310,7 +305,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	std::string message;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	if (isFilenameChanged(filename)) {
 		real_filename = removeIndex(filename);
@@ -353,7 +347,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -1;
 		}
 
-		bytes = receiveBytes(client_socket_listen, buffer, chunk_size, MSG_WAITFORONE);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
@@ -367,7 +361,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		if (bytes < 0) {
 			return -1;
 		}
-
 		total_bytes += bytes;
 	}
 	return total_bytes;
@@ -427,22 +420,22 @@ void Connection::updateStorage() {
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto& entry : storage) {
-		++file_count[entry.second.filename];
+		++file_count[entry.second.hash];
 	}
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
 			if (first->second.hash != second->second.hash &&
 					first->second.filename == second->second.filename) {
-				int64_t file_occurrences = file_count[first->second.filename];
+				int64_t file_occurrences = file_count[first->second.hash];
 
 				if (file_occurrences > 1) {
 					first->second.filename += '(' + std::to_string(file_occurrences - 1) + ')';
 					second->second.filename += '(' + std::to_string(file_occurrences) + ')';
 					first->second.is_filename_changed = true;
 					second->second.is_filename_changed = true;
-					--file_count[first->second.filename];
-					--file_count[second->second.filename];
+					--file_count[first->second.hash];
+					--file_count[second->second.hash];
 				}
 			}
 		}
@@ -459,8 +452,8 @@ void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string&
 }
 
 void Connection::removeFiles(std::pair<int32_t, int32_t> pair) {
-	auto range = storage.equal_range(pair);
 	std::lock_guard<std::mutex> lock(mutex_storage);
+	auto range = storage.equal_range(pair);
 
 	for (auto it = range.first; it != range.second; ++it) {
 		std::string filename = removeIndex(it->second.filename);

@@ -62,6 +62,8 @@ int64_t Connection::getFile(const std::string& filename) {
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
 
+	std::cout << "[*] Wait: The server is processing the request" << std::endl;
+
 	if (isFileExist(filename)) {
 		return -2;
 	}
@@ -108,13 +110,15 @@ int64_t Connection::getFile(const std::string& filename) {
 	return total_bytes;
 }
 
-int64_t Connection::getList(std::vector<std::string>& list) {
+int64_t Connection::getList(std::vector<std::string>& list) const {
 	int64_t bytes;
 	int64_t total_bytes;
 	int64_t message_size;
 	std::string message;
 	const std::string& command_list = commands[0];
 	const std::string& command_error = commands[3];
+
+	std::cout << "[*] Wait: The server is processing the request" << std::endl;
 
 	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
 	if (bytes < 0) {
@@ -156,7 +160,7 @@ int64_t Connection::getList(std::vector<std::string>& list) {
 	return total_bytes;
 }
 
-bool Connection::exit() {
+bool Connection::exit() const {
 	const std::string& command_exit = commands[2];
 
 	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
@@ -315,7 +319,6 @@ int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t
 
 int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
-	std::lock_guard<std::mutex> lock(mutex_socket_communicate);
 
 	bytes = send(socket, buffer, size, flags);
 	return bytes;
@@ -323,7 +326,6 @@ int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t s
 
 int64_t Connection::receiveBytes(int32_t socket, std::byte* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
-	std::lock_guard<std::mutex> lock(mutex_socket_listen);
 
 	bytes = recv(socket, buffer, size, flags);
 	return bytes;
