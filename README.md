@@ -17,6 +17,12 @@ the download is carried out simultaneously from all clients, alternating blocks 
 list of shared files, **get "file_name"** - download the "file_name", **exit** - exit from app,
 **help** - print possible commands.
 
+It has been implemented: multithreaded and asynchronous servers.
+## Dependencies
+```bash
+sudo apt-get install libboost-all-dev
+```
+
 ## Build
 From the root of the repository:
 
