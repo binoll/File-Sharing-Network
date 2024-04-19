@@ -1,6 +1,8 @@
+// Copyright 2024 binoll
 #pragma once
 
 #include <unordered_map>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -10,7 +12,6 @@
 #include <thread>
 #include <numeric>
 #include <vector>
-#include <atomic>
 #include <mutex>
 #include <list>
 #include <map>

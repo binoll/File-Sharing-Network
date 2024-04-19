@@ -1,3 +1,4 @@
+// Copyright 2024 binoll
 #include "client.hpp"
 #include "commandline/commandline.hpp"
 

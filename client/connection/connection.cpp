@@ -1,3 +1,4 @@
+// Copyright 2024 binoll
 #include "connection.hpp"
 
 Connection::Connection(std::string dir) : dir(std::move(dir)) {
@@ -48,7 +49,8 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		return false;
 	}
 
-	if (setsockopt(socket_communicate, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) < 0) {
+	if (setsockopt(socket_communicate, SOL_SOCKET, SO_RCVTIMEO,
+	               reinterpret_cast<char*>(&timeout), sizeof(timeout)) < 0) {
 		return -1;
 	}
 
@@ -296,7 +298,8 @@ int64_t Connection::sendList(int32_t socket) {
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
 	int64_t bytes;
-	std::byte buffer[message.size()];
+	const auto size = static_cast<int64_t>(message.size());
+	std::byte buffer[size];
 
 	std::memcpy(buffer, message.data(), message.size());
 	bytes = sendBytes(

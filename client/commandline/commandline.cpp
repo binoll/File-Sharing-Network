@@ -1,3 +1,4 @@
+// Copyright 2024 binoll
 #include "commandline.hpp"
 
 CommandLine::CommandLine(std::string& path) : connection(path) {
