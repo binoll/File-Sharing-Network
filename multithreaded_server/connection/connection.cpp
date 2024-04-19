@@ -232,7 +232,8 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 		return false;
 	}
 
-	if ((message_size = processResponse(message)) < 0) {
+	message_size = processResponse(message);
+	if (message_size < 0) {
 		return false;
 	}
 
@@ -306,9 +307,9 @@ int64_t Connection::sendList(int32_t socket) {
 }
 
 int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
-	int64_t message_size = getSize(filename);
 	int64_t bytes;
 	int64_t total_bytes = 0;
+	int64_t message_size = getSize(filename);
 	std::string real_filename;
 	std::string message;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
@@ -331,7 +332,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		return -1;
 	}
 
-	auto it = std::find_if(
+	std::remove_if(
 			sockets.begin(),
 			sockets.end(),
 			[&](const std::pair<int32_t, int32_t>& pair) {
@@ -339,22 +340,16 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			}
 	);
 
-	if (it != sockets.end()) {
-		sockets.erase(it);
-	}
-
 	if (sockets.empty()) {
 		return -1;
 	}
 
 	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += bytes) {
 		std::byte buffer[BUFFER_SIZE];
-		int32_t client_socket_listen = sockets[i % sockets.size()].first;
-		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
+		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 		struct timeval timeout { };
 		timeout.tv_sec = 5;
-		std::string response;
 		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + real_filename;
 
 		std::remove_if(
@@ -374,26 +369,26 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			continue;
 		}
 
-		if (setsockopt(client_socket_communicate, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) < 0) {
+		bytes = setsockopt(client_socket_communicate, SOL_SOCKET, SO_RCVTIMEO,
+		                   reinterpret_cast<char*>(&timeout), sizeof(timeout));
+		if (bytes < 0) {
 			continue;
 		}
 
 		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
 		if (bytes < 0) {
 			continue;
-		} else if (message == command_error) {
-			return -1;
 		}
 
-		response = std::string(reinterpret_cast<char*>(buffer), bytes);
-		if (response == command_error) {
-			return -1;
+		if (std::string(reinterpret_cast<const char*>(buffer), bytes) == command_error) {
+			return -2;
 		}
 
 		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
 		if (bytes < 0) {
 			continue;
 		}
+
 		total_bytes += bytes;
 	}
 	return total_bytes;

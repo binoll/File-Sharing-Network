@@ -298,8 +298,7 @@ int64_t Connection::sendList(int32_t socket) {
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
 	int64_t bytes;
-	const auto size = static_cast<int64_t>(message.size());
-	std::byte buffer[size];
+	std::byte buffer[message.size()];
 
 	std::memcpy(buffer, message.data(), message.size());
 	bytes = sendBytes(
