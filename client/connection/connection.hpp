@@ -60,6 +60,7 @@ class Connection {
 	int32_t socket_communicate;
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
+	struct timeval timeout { };
 	std::thread thread;
 	std::mutex mutex_dir;
 };

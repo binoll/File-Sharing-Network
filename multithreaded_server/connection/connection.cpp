@@ -120,6 +120,11 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
 		std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
+		close(client_socket_listen);
+		close(client_socket_communicate);
+		removeClients(std::pair(client_socket_listen, client_socket_communicate));
+		updateStorage();
+		std::cout << "[+] Success: Client disconnected." << std::endl;
 		return;
 	}
 
@@ -153,7 +158,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	}
 	close(client_socket_listen);
 	close(client_socket_communicate);
-	removeFiles(std::pair(client_socket_listen, client_socket_communicate));
+	removeClients(std::pair(client_socket_listen, client_socket_communicate));
 	updateStorage();
 	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
@@ -226,7 +231,9 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 		return false;
 	}
 
-	message_size = processResponse(message);
+	if ((message_size = processResponse(message)) < 0) {
+		return false;
+	}
 
 	while (message_size > 0) {
 		std::istringstream iss(message);
@@ -323,32 +330,57 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		return -1;
 	}
 
+	auto it = std::find_if(
+			sockets.begin(),
+			sockets.end(),
+			[&](const std::pair<int32_t, int32_t>& pair) {
+				return pair.first == socket || pair.second == socket;
+			}
+	);
+
+	if (it != sockets.end()) {
+		sockets.erase(it);
+	}
+
 	if (sockets.empty()) {
 		return -1;
 	}
 
 	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += bytes) {
+		std::byte buffer[BUFFER_SIZE];
 		int32_t client_socket_listen = sockets[i % sockets.size()].first;
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
+		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
+		struct timeval timeout { };
+		timeout.tv_sec = 5;
+		std::string response;
+		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + real_filename;
 
-		if (client_socket_listen == -1 || client_socket_communicate == -1 ||
-				socket == client_socket_communicate || socket == client_socket_listen) {
+		std::remove_if(
+				sockets.begin(),
+				sockets.end(),
+				[&](const std::pair<int32_t, int32_t>& pair) {
+					return !isConnect(pair.first, pair.second);
+				}
+		);
+
+		if (sockets.empty()) {
 			return -1;
 		}
-
-		std::byte buffer[BUFFER_SIZE];
-		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
-		message = commands[1] + ':' + std::to_string(offset) + ':' +
-				std::to_string(chunk_size) + ':' + real_filename;
-		std::string response;
 
 		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
 		if (bytes < 0) {
-			return -1;
+			continue;
+		}
+
+		if (setsockopt(client_socket_communicate, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) < 0) {
+			continue;
 		}
 
 		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
-		if (bytes < 0 || message == command_error) {
+		if (bytes < 0) {
+			continue;
+		} else if (message == command_error) {
 			return -1;
 		}
 
@@ -359,7 +391,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 
 		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
 		if (bytes < 0) {
-			return -1;
+			continue;
 		}
 		total_bytes += bytes;
 	}
@@ -451,7 +483,7 @@ void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string&
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }
 
-void Connection::removeFiles(std::pair<int32_t, int32_t> pair) {
+void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 	std::lock_guard<std::mutex> lock(mutex_storage);
 	auto range = storage.equal_range(pair);
 

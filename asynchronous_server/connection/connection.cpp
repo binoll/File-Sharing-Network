@@ -153,7 +153,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	}
 	close(client_socket_listen);
 	close(client_socket_communicate);
-	removeFiles(std::pair(client_socket_listen, client_socket_communicate));
+	removeClients(std::pair(client_socket_listen, client_socket_communicate));
 	updateStorage();
 	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
@@ -451,7 +451,7 @@ void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string&
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }
 
-void Connection::removeFiles(std::pair<int32_t, int32_t> pair) {
+void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 	std::lock_guard<std::mutex> lock(mutex_storage);
 	auto range = storage.equal_range(pair);
 

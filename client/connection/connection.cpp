@@ -22,6 +22,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 	addr_communicate.sin_family = AF_INET;
 	addr_listen.sin_port = htons(port_listen);
 	addr_communicate.sin_port = htons(port_communicate);
+	timeout.tv_sec = 5;
 
 	if (inet_pton(AF_INET, ip.c_str(), &addr_listen.sin_addr) < 0) {
 		std::cout << "[-] Error: Invalid server address." << std::endl;
@@ -46,6 +47,11 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cout << "[-] Error: Failed send the list of files." << std::endl;
 		return false;
 	}
+
+	if (setsockopt(socket_communicate, SOL_SOCKET, SO_RCVTIMEO, (char*) &timeout, sizeof(timeout)) < 0) {
+		return -1;
+	}
+
 	std::cout << "[+] The connection is established: " << ip << ':' << htons(addr_listen.sin_port) << ' ' << ip << ':'
 			<< htons(addr_communicate.sin_port) << '.' << std::endl;
 	thread = std::thread(&Connection::handleServer, this);
