@@ -23,6 +23,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <boost/crc.hpp>
+
 #define BUFFER_SIZE 1024
 
 const std::vector<std::string> commands = {"list", "get", "exit", "error"};

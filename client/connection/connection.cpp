@@ -99,7 +99,7 @@ int64_t Connection::getFile(const std::string& filename) {
 	total_bytes = static_cast<int64_t>(message.size());
 
 	while (message_size > 0) {
-		bytes = receiveBytes(socket_communicate, buffer, BUFFER_SIZE, MSG_WAITFORONE);
+		bytes = receiveBytes(socket_communicate, buffer, sizeof(buffer), MSG_WAITFORONE);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -314,9 +314,9 @@ int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t
 	int64_t bytes;
 	std::byte buffer[BUFFER_SIZE];
 
-	bytes = receiveBytes(socket, buffer, BUFFER_SIZE, flags);
+	bytes = receiveBytes(socket, buffer, sizeof(buffer), flags);
 	if (bytes > 0) {
-		message.append(reinterpret_cast<const char*>(buffer), bytes);
+		message.append(reinterpret_cast<char*>(buffer), bytes);
 	}
 	return bytes;
 }
@@ -370,6 +370,7 @@ std::vector<std::string> Connection::getListFiles() {
 
 	try {
 		std::filesystem::directory_iterator iterator(dir);
+
 		for (const auto& entry : iterator) {
 			if (std::filesystem::is_regular_file(entry)) {
 				vector.push_back(entry.path().filename().string());
@@ -391,23 +392,27 @@ uint64_t Connection::getFileSize(const std::string& filename) {
 }
 
 std::string Connection::calculateFileHash(const std::string& filename) {
-	uint64_t hash_result;
 	std::ifstream file(filename, std::ios::binary);
-	std::ostringstream oss;
-	std::stringstream ss;
-	std::string file_content;
-	std::hash<std::string> hash_fn;
+	boost::crc_32_type crc32;
 
-	if (!file) {
+	if (!file.is_open()) {
 		std::cout << "[-] Error: Failed to open the file." << std::endl;
 		return "";
 	}
 
-	oss << file.rdbuf();
-	file_content = oss.str();
-	hash_result = hash_fn(file_content);
-	ss << std::hex << hash_result;
-	return ss.str();
+	std::byte buffer[4 * BUFFER_SIZE];
+	while (file.read(reinterpret_cast<char*>(buffer), sizeof(buffer))) {
+		crc32.process_bytes(buffer, sizeof(buffer));
+	}
+
+	std::size_t remaining_bytes = file.gcount();
+	if (remaining_bytes > 0) {
+		crc32.process_bytes(buffer, remaining_bytes);
+	}
+
+	std::ostringstream oss;
+	oss << std::hex << crc32.checksum();
+	return oss.str();
 }
 
 bool Connection::isFileExist(const std::string& filename) {
