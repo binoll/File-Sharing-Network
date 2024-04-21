@@ -1,3 +1,4 @@
+// Copyright 2024 binoll
 #include "connection.hpp"
 
 Connection::Connection() {
@@ -48,6 +49,8 @@ void Connection::waitConnection() {
 	std::cout << "[*] Server is listening on port for listening: " << htons(addr_listen.sin_port)
 			<< '.' << std::endl;
 
+	std::thread(&Connection::handleClients, this).detach();
+
 	while (true) {
 		int32_t client_socket_listen;
 		int32_t client_socket_communicate;
@@ -55,6 +58,7 @@ void Connection::waitConnection() {
 		struct sockaddr_in client_addr_communicate { };
 		socklen_t addr_listen_len = sizeof(client_addr_listen);
 		socklen_t addr_communicate_len = sizeof(client_addr_communicate);
+		std::pair<int32_t, int32_t> pair;
 
 		client_socket_communicate = accept(socket_communicate,
 		                                   reinterpret_cast<struct sockaddr*>(&client_addr_communicate),
@@ -66,15 +70,49 @@ void Connection::waitConnection() {
 			continue;
 		}
 
+		pair = {client_socket_listen, client_socket_communicate};
+		sockets.push_back(pair);
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
 				<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
 				<< client_addr_communicate.sin_port << '.' << std::endl;
-		std::thread(&Connection::handleClients, this, client_socket_listen, client_socket_communicate).detach();
+
+		if (!synchronization(pair)) {
+			std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
+			removeClients(pair);
+			std::cout << "[+] Success: Client disconnected." << std::endl;
+		}
 	}
 }
 
-bool Connection::isConnect(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	return checkConnection(client_socket_listen) && checkConnection(client_socket_communicate);
+bool Connection::isConnect(std::pair<int32_t, int32_t> pair) {
+	return checkConnection(pair.first) && checkConnection(pair.second);
+}
+
+std::pair<int32_t, int32_t> Connection::hasDataToRead() {
+	fd_set fds;
+	FD_ZERO(&fds);
+
+	int32_t maxfd_listen = 0;
+	int32_t maxfd_communicate = 0;
+
+	for (const auto& pair : sockets) {
+		FD_SET(pair.first, &fds);
+		maxfd_listen = std::max(maxfd_listen, pair.first);
+		FD_SET(pair.second, &fds);
+		maxfd_communicate = std::max(maxfd_communicate, pair.second);
+	}
+
+	struct timeval timeout { };
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+
+	int32_t result = select(std::max(maxfd_listen, maxfd_communicate) + 1, &fds, nullptr, nullptr, &timeout);
+
+	if (result <= 0) {
+		return {-1, -1};
+	} else {
+		return {maxfd_listen, maxfd_communicate};
+	}
 }
 
 int32_t Connection::getPort() {
@@ -111,51 +149,66 @@ bool Connection::checkConnection(int32_t socket) {
 	return true;
 }
 
-void Connection::handleClients(int32_t client_socket_listen, int32_t client_socket_communicate) {
+void Connection::handleClients() {
+	std::pair<int32_t, int32_t> pair;
+	std::pair<int32_t, int32_t> invalid_pair = {-1, -1};
+
+	while (true) {
+		pair = hasDataToRead();
+
+		if (!isConnect(pair) || pair == invalid_pair) {
+			removeClients(pair);
+			std::cout << "[+] Success: Client disconnected." << std::endl;
+			continue;
+		} else {
+			continue;
+		}
+
+		boost::coroutines::asymmetric_coroutine<void>::push_type coroutine(
+				[&](boost::coroutines::asymmetric_coroutine<void>::pull_type& yield) {
+					processingClient(yield, pair);
+				});
+		coroutine();
+	}
+}
+
+void Connection::processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield,
+                                  std::pair<int32_t, int32_t>& pair) {
 	int64_t bytes;
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1] + ':';
 	const std::string& command_exit = commands[2];
 	const std::string& command_error = commands[3];
+	std::string command;
 
-	if (!synchronization(client_socket_listen, client_socket_communicate)) {
-		std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
-		return;
-	}
-
-	updateStorage();
-
-	while (isConnect(client_socket_listen, client_socket_communicate)) {
-		std::string command;
-		receiveMessage(client_socket_listen, command, MSG_DONTWAIT);
+	while (true) {
+		receiveMessage(pair.first, command, MSG_DONTWAIT);
 
 		if (command == command_list) {
-			bytes = sendList(client_socket_listen);
+			bytes = sendList(pair.first);
 			if (bytes < 0) {
-				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(pair.second, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the list of files." << std::endl;
+			} else {
+				std::cout << "[+] Success: List sent successfully." << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
 			std::vector<std::string> tokens;
 			split(command, ':', tokens);
 			std::string filename = tokens[1];
 
-			bytes = sendFile(client_socket_listen, filename);
+			bytes = sendFile(pair.first, filename);
 			if (bytes < 0) {
-				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(pair.first, command_error, MSG_CONFIRM);
 				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
 			} else {
 				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
 			}
 		} else if (command == command_exit) {
-			break;
+			return;
 		}
+		yield();
 	}
-	close(client_socket_listen);
-	close(client_socket_communicate);
-	removeClients(std::pair(client_socket_listen, client_socket_communicate));
-	updateStorage();
-	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
@@ -215,18 +268,21 @@ int64_t Connection::processResponse(std::string& message) {
 	return size;
 }
 
-bool Connection::synchronization(int32_t client_socket_listen, int32_t client_socket_communicate) {
+bool Connection::synchronization(std::pair<int32_t, int32_t>& pair) {
 	int64_t message_size;
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
 
-	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
+	bytes = receiveMessage(pair.first, message, MSG_WAITFORONE);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
 
 	message_size = processResponse(message);
+	if (message_size < 0) {
+		return false;
+	}
 
 	while (message_size > 0) {
 		std::istringstream iss(message);
@@ -243,8 +299,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 
 			try {
 				int64_t file_size = std::stoll(file_size_str);
-				storeFiles(std::make_pair(client_socket_listen, client_socket_communicate),
-				           filename, file_size, file_hash);
+				storeFiles(pair, filename, file_size, file_hash);
 			} catch (const std::invalid_argument& err) {
 				std::cout << "[-] Error: Invalid argument: " << err.what() << '.' << std::endl;
 				return false;
@@ -260,7 +315,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			break;
 		}
 
-		bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
+		bytes = receiveMessage(pair.first, message, MSG_WAITFORONE);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
@@ -298,12 +353,12 @@ int64_t Connection::sendList(int32_t socket) {
 }
 
 int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
-	int64_t message_size = getSize(filename);
 	int64_t bytes;
 	int64_t total_bytes = 0;
+	int64_t message_size = getSize(filename);
 	std::string real_filename;
 	std::string message;
-	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
+	std::vector<std::pair<int32_t, int32_t>> sockets_filename = findFd(filename);
 	const std::string& command_error = commands[3];
 
 	if (isFilenameChanged(filename)) {
@@ -323,44 +378,63 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		return -1;
 	}
 
-	if (sockets.empty()) {
+	std::remove_if(
+			sockets_filename.begin(),
+			sockets_filename.end(),
+			[&](const std::pair<int32_t, int32_t>& pair) {
+				return pair.first == socket || pair.second == socket;
+			}
+	);
+
+	if (sockets_filename.empty()) {
 		return -1;
 	}
 
 	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += bytes) {
-		int32_t client_socket_listen = sockets[i % sockets.size()].first;
-		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
-
-		if (client_socket_listen == -1 || client_socket_communicate == -1 ||
-				socket == client_socket_communicate || socket == client_socket_listen) {
-			return -1;
-		}
-
 		std::byte buffer[BUFFER_SIZE];
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
-		message = commands[1] + ':' + std::to_string(offset) + ':' +
-				std::to_string(chunk_size) + ':' + real_filename;
-		std::string response;
+		int32_t client_socket_communicate = sockets_filename[i % sockets_filename.size()].second;
+		struct timeval timeout { };
+		timeout.tv_sec = 5;
+		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + real_filename;
+
+		std::remove_if(
+				sockets_filename.begin(),
+				sockets_filename.end(),
+				[&](const std::pair<int32_t, int32_t>& pair) {
+					return !isConnect(pair);
+				}
+		);
+
+		if (sockets_filename.empty()) {
+			return -1;
+		}
 
 		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
 		if (bytes < 0) {
-			return -1;
+			continue;
+		}
+
+		bytes = setsockopt(client_socket_communicate, SOL_SOCKET, SO_RCVTIMEO,
+		                   reinterpret_cast<char*>(&timeout), sizeof(timeout));
+		if (bytes < 0) {
+			continue;
 		}
 
 		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
-		if (bytes < 0 || message == command_error) {
-			return -1;
+		if (bytes < 0) {
+			continue;
 		}
 
-		response = std::string(reinterpret_cast<char*>(buffer), bytes);
-		if (response == command_error) {
-			return -1;
+		if (std::string(reinterpret_cast<const char*>(buffer), bytes) == command_error) {
+			return -2;
 		}
 
 		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
 		if (bytes < 0) {
-			return -1;
+			continue;
 		}
+
 		total_bytes += bytes;
 	}
 	return total_bytes;
@@ -368,7 +442,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 
 std::vector<std::pair<int32_t, int32_t>> Connection::findFd(const std::string& filename) {
 	std::vector<std::pair<int32_t, int32_t>> vector;
-	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (const auto& entry : storage) {
 		std::string str;
@@ -384,7 +457,6 @@ std::vector<std::string> Connection::getListFiles() {
 	std::unordered_map<std::string, int> filename_counts;
 	std::vector<std::string> unique_filenames;
 	std::vector<std::string> duplicate_filenames;
-	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (const auto& entry : storage) {
 		filename_counts[entry.second.filename]++;
@@ -405,8 +477,6 @@ std::vector<std::string> Connection::getListFiles() {
 }
 
 int64_t Connection::getSize(const std::string& filename) {
-	std::lock_guard<std::mutex> lock(mutex_storage);
-
 	for (const auto& it : storage) {
 		if (it.second.filename == filename) {
 			return it.second.size;
@@ -417,7 +487,6 @@ int64_t Connection::getSize(const std::string& filename) {
 
 void Connection::updateStorage() {
 	std::unordered_map<std::string, int64_t> file_count;
-	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto& entry : storage) {
 		++file_count[entry.second.hash];
@@ -445,14 +514,12 @@ void Connection::updateStorage() {
 void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string& filename, int64_t size,
                             const std::string& hash) {
 	FileInfo data {size, hash, filename, false};
-	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	storage.insert(std::pair(pair, data));
 	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
 }
 
 void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
-	std::lock_guard<std::mutex> lock(mutex_storage);
 	auto range = storage.equal_range(pair);
 
 	for (auto it = range.first; it != range.second; ++it) {
@@ -465,6 +532,9 @@ void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 		}
 	}
 	storage.erase(range.first, range.second);
+	close(pair.first);
+	close(pair.second);
+	updateStorage();
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {
@@ -486,8 +556,6 @@ std::string Connection::removeIndex(std::string filename) {
 }
 
 bool Connection::isFilenameChanged(const std::string& filename) {
-	std::lock_guard<std::mutex> lock(mutex_storage);
-
 	for (auto& entry : storage) {
 		if (entry.second.filename == filename) {
 			return entry.second.is_filename_changed;

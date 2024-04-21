@@ -1,3 +1,4 @@
+// Copyright 2024 binoll
 #pragma once
 
 #include "../server.hpp"
@@ -10,14 +11,18 @@ class Connection {
 
 	void waitConnection();
 
-	static bool isConnect(int32_t, int32_t);
+	static bool isConnect(std::pair<int32_t, int32_t>);
 
  private:
+	std::pair<int32_t, int32_t> hasDataToRead();
+
 	static int32_t getPort();
 
 	static bool checkConnection(int32_t);
 
-	void handleClients(int32_t, int32_t);
+	void handleClients();
+
+	void processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield, std::pair<int32_t, int32_t>& pair);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
@@ -29,7 +34,7 @@ class Connection {
 
 	static int64_t processResponse(std::string&);
 
-	bool synchronization(int32_t, int32_t);
+	bool synchronization(std::pair<int32_t, int32_t>&);
 
 	int64_t sendList(int32_t);
 
@@ -58,5 +63,5 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
-	std::mutex mutex_storage;
+	std::vector<std::pair<int32_t, int32_t>> sockets;
 };

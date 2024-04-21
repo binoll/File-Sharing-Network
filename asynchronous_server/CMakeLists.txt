@@ -8,3 +8,5 @@ add_executable(
         server.cpp
         connection/connection.cpp
 )
+
+target_link_libraries(asynchronous_server boost_coroutine)

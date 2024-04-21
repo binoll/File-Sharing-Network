@@ -24,6 +24,7 @@
 #include <arpa/inet.h>
 
 #include <boost/crc.hpp>
+#include <boost/coroutine/all.hpp>
 
 #define BUFFER_SIZE 1024
 
