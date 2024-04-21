@@ -14,7 +14,7 @@ class Connection {
 	static bool isConnect(std::pair<int32_t, int32_t>);
 
  private:
-	std::pair<int32_t, int32_t> hasDataToRead();
+	void hasDataToRead(boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type&);
 
 	static int32_t getPort();
 
@@ -22,7 +22,8 @@ class Connection {
 
 	void handleClients();
 
-	void processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield, std::pair<int32_t, int32_t>& pair);
+	void processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield,
+	                      std::pair<int32_t, int32_t>& pair);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
@@ -52,7 +53,7 @@ class Connection {
 
 	void removeClients(std::pair<int32_t, int32_t> pair);
 
-	static void split(const std::string&, char, std::vector<std::string>&);
+	static void split(const std::string&, std::vector<std::string>&);
 
 	static std::string removeIndex(std::string);
 
@@ -64,4 +65,5 @@ class Connection {
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
 	std::vector<std::pair<int32_t, int32_t>> sockets;
+	std::mutex mutex;
 };

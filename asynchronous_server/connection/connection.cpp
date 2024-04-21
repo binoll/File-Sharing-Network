@@ -71,7 +71,6 @@ void Connection::waitConnection() {
 		}
 
 		pair = {client_socket_listen, client_socket_communicate};
-		sockets.push_back(pair);
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
 				<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
 				<< client_addr_communicate.sin_port << '.' << std::endl;
@@ -88,30 +87,34 @@ bool Connection::isConnect(std::pair<int32_t, int32_t> pair) {
 	return checkConnection(pair.first) && checkConnection(pair.second);
 }
 
-std::pair<int32_t, int32_t> Connection::hasDataToRead() {
-	fd_set fds;
-	FD_ZERO(&fds);
+void Connection::hasDataToRead(boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield) {
+	while (true) {
+		fd_set fds;
+		FD_ZERO(&fds);
+		int32_t maxfd_listen = 0;
+		int32_t maxfd_communicate = 0;
+		std::lock_guard<std::mutex> lock(mutex);
 
-	int32_t maxfd_listen = 0;
-	int32_t maxfd_communicate = 0;
+		for (const auto& pair : sockets) {
+			FD_SET(pair.first, &fds);
+			maxfd_listen = std::max(maxfd_listen, pair.first);
+			FD_SET(pair.second, &fds);
+			maxfd_communicate = std::max(maxfd_communicate, pair.second);
 
-	for (const auto& pair : sockets) {
-		FD_SET(pair.first, &fds);
-		maxfd_listen = std::max(maxfd_listen, pair.first);
-		FD_SET(pair.second, &fds);
-		maxfd_communicate = std::max(maxfd_communicate, pair.second);
-	}
+			struct timeval timeout { };
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 0;
 
-	struct timeval timeout { };
-	timeout.tv_sec = 0;
-	timeout.tv_usec = 0;
+			int32_t result = select(std::max(maxfd_listen, maxfd_communicate) + 1, &fds, nullptr, nullptr, &timeout);
 
-	int32_t result = select(std::max(maxfd_listen, maxfd_communicate) + 1, &fds, nullptr, nullptr, &timeout);
-
-	if (result <= 0) {
-		return {-1, -1};
-	} else {
-		return {maxfd_listen, maxfd_communicate};
+			if (result < 0) {
+				yield({-1, -1});
+			} else if (result == 0) {
+				yield({0, 0});
+			} else {
+				yield({maxfd_listen, maxfd_communicate});
+			}
+		}
 	}
 }
 
@@ -152,23 +155,28 @@ bool Connection::checkConnection(int32_t socket) {
 void Connection::handleClients() {
 	std::pair<int32_t, int32_t> pair;
 	std::pair<int32_t, int32_t> invalid_pair = {-1, -1};
+	std::pair<int32_t, int32_t> empty_pair = {0, 0};
 
 	while (true) {
-		pair = hasDataToRead();
+		boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::pull_type coroutine_get_sockets(
+				[&](boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield) {
+					hasDataToRead(yield);
+				});
+		pair = coroutine_get_sockets().get();
 
-		if (!isConnect(pair) || pair == invalid_pair) {
+		if (sockets.empty() || pair == empty_pair) {
+			continue;
+		} else if (!isConnect(pair) || pair == invalid_pair) {
 			removeClients(pair);
 			std::cout << "[+] Success: Client disconnected." << std::endl;
 			continue;
-		} else {
-			continue;
 		}
 
-		boost::coroutines::asymmetric_coroutine<void>::push_type coroutine(
+		boost::coroutines::asymmetric_coroutine<void>::push_type coroutine_processing(
 				[&](boost::coroutines::asymmetric_coroutine<void>::pull_type& yield) {
 					processingClient(yield, pair);
 				});
-		coroutine();
+		coroutine_processing();
 	}
 }
 
@@ -182,24 +190,24 @@ void Connection::processingClient(boost::coroutines::asymmetric_coroutine<void>:
 	std::string command;
 
 	while (true) {
-		receiveMessage(pair.first, command, MSG_DONTWAIT);
+		receiveMessage(pair.first, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
 		if (command == command_list) {
 			bytes = sendList(pair.first);
 			if (bytes < 0) {
-				sendMessage(pair.second, command_error, MSG_CONFIRM);
+				sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << "[-] Error: Failed send the list of files." << std::endl;
 			} else {
 				std::cout << "[+] Success: List sent successfully." << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
 			std::vector<std::string> tokens;
-			split(command, ':', tokens);
+			split(command, tokens);
 			std::string filename = tokens[1];
 
 			bytes = sendFile(pair.first, filename);
 			if (bytes < 0) {
-				sendMessage(pair.first, command_error, MSG_CONFIRM);
+				sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
 			} else {
 				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
@@ -273,8 +281,9 @@ bool Connection::synchronization(std::pair<int32_t, int32_t>& pair) {
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
+	std::lock_guard<std::mutex> lock(mutex);
 
-	bytes = receiveMessage(pair.first, message, MSG_WAITFORONE);
+	bytes = receiveMessage(pair.first, message, MSG_WAITFORONE | MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
@@ -315,11 +324,12 @@ bool Connection::synchronization(std::pair<int32_t, int32_t>& pair) {
 			break;
 		}
 
-		bytes = receiveMessage(pair.first, message, MSG_WAITFORONE);
+		bytes = receiveMessage(pair.first, message, MSG_WAITFORONE | MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
 	}
+	sockets.push_back(pair);
 	return true;
 }
 
@@ -340,12 +350,12 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message_size, MSG_CONFIRM);
+	bytes = sendMessage(socket, message_size, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, list, MSG_CONFIRM);
+	bytes = sendMessage(socket, list, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -373,7 +383,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message, MSG_CONFIRM);
+	bytes = sendMessage(socket, message, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -410,7 +420,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -1;
 		}
 
-		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
+		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -421,7 +431,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			continue;
 		}
 
-		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -430,7 +440,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -2;
 		}
 
-		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
+		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -537,11 +547,11 @@ void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 	updateStorage();
 }
 
-void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {
+void Connection::split(const std::string& str, std::vector<std::string>& tokens) {
 	std::string token;
 	std::istringstream tokenStream(str);
 
-	while (std::getline(tokenStream, token, delim)) {
+	while (std::getline(tokenStream, token, ':')) {
 		tokens.push_back(token);
 	}
 }

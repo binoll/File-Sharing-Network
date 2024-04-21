@@ -130,12 +130,12 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 
 	while (isConnect(client_socket_listen, client_socket_communicate)) {
 		std::string command;
-		receiveMessage(client_socket_listen, command, MSG_DONTWAIT);
+		receiveMessage(client_socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
 		if (command == command_list) {
 			bytes = sendList(client_socket_listen);
 			if (bytes < 0) {
-				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << "[-] Error: Failed send the list of files." << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
@@ -145,7 +145,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 
 			bytes = sendFile(client_socket_listen, filename);
 			if (bytes < 0) {
-				sendMessage(client_socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(client_socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
 			} else {
 				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
@@ -223,7 +223,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	std::string message;
 	const std::string& command_error = commands[3];
 
-	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
+	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE | MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
@@ -265,7 +265,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			break;
 		}
 
-		bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE);
+		bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE | MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
@@ -291,12 +291,12 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message_size, MSG_CONFIRM);
+	bytes = sendMessage(socket, message_size, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, list, MSG_CONFIRM);
+	bytes = sendMessage(socket, list, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -324,7 +324,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message, MSG_CONFIRM);
+	bytes = sendMessage(socket, message, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -361,7 +361,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -1;
 		}
 
-		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM);
+		bytes = sendMessage(client_socket_communicate, message, MSG_CONFIRM | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -372,7 +372,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			continue;
 		}
 
-		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -381,7 +381,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			return -2;
 		}
 
-		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM);
+		bytes = sendBytes(socket, buffer, bytes, MSG_CONFIRM | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
