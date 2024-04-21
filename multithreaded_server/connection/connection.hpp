@@ -46,7 +46,7 @@ class Connection {
 
 	void storeFiles(std::pair<int32_t, int32_t>, const std::string&, int64_t, const std::string&);
 
-	void removeClients(std::pair<int32_t, int32_t> pair);
+	void removeClients(std::pair<int32_t, int32_t>);
 
 	static void split(const std::string&, char, std::vector<std::string>&);
 

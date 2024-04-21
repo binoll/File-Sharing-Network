@@ -124,12 +124,9 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 		close(client_socket_listen);
 		close(client_socket_communicate);
 		removeClients(std::pair(client_socket_listen, client_socket_communicate));
-		updateStorage();
 		std::cout << "[+] Success: Client disconnected." << std::endl;
 		return;
 	}
-
-	updateStorage();
 
 	while (isConnect(client_socket_listen, client_socket_communicate)) {
 		std::string command;
@@ -160,7 +157,6 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	close(client_socket_listen);
 	close(client_socket_communicate);
 	removeClients(std::pair(client_socket_listen, client_socket_communicate));
-	updateStorage();
 	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
 
@@ -274,6 +270,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			return false;
 		}
 	}
+	updateStorage();
 	return true;
 }
 
@@ -493,6 +490,7 @@ void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 		}
 	}
 	storage.erase(range.first, range.second);
+	updateStorage();
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {
