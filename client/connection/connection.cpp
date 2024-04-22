@@ -23,7 +23,6 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 	addr_communicate.sin_family = AF_INET;
 	addr_listen.sin_port = htons(port_listen);
 	addr_communicate.sin_port = htons(port_communicate);
-	timeout.tv_sec = 5;
 
 	if (inet_pton(AF_INET, ip.c_str(), &addr_listen.sin_addr) < 0) {
 		std::cout << "[-] Error: Invalid server address." << std::endl;
@@ -49,11 +48,6 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		return false;
 	}
 
-	if (setsockopt(socket_communicate, SOL_SOCKET, SO_RCVTIMEO,
-	               reinterpret_cast<char*>(&timeout), sizeof(timeout)) < 0) {
-		return -1;
-	}
-
 	std::cout << "[+] The connection is established: " << ip << ':' << htons(addr_listen.sin_port) << ' ' << ip << ':'
 			<< htons(addr_communicate.sin_port) << '.' << std::endl;
 	thread = std::thread(&Connection::handleServer, this);
@@ -74,12 +68,12 @@ int64_t Connection::getFile(const std::string& filename) {
 		return -2;
 	}
 
-	bytes = sendMessage(socket_communicate, command_get, MSG_CONFIRM);
+	bytes = sendMessage(socket_communicate, command_get, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return -1;
 	}
@@ -99,7 +93,7 @@ int64_t Connection::getFile(const std::string& filename) {
 	total_bytes = static_cast<int64_t>(message.size());
 
 	while (message_size > 0) {
-		bytes = receiveBytes(socket_communicate, buffer, sizeof(buffer), MSG_WAITFORONE);
+		bytes = receiveBytes(socket_communicate, buffer, sizeof(buffer), MSG_NOSIGNAL);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -124,12 +118,12 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 	const std::string& command_list = commands[0];
 	const std::string& command_error = commands[3];
 
-	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM);
+	bytes = sendMessage(socket_communicate, command_list, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+	bytes = receiveMessage(socket_communicate, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return -1;
 	}
@@ -156,7 +150,7 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 			break;
 		}
 
-		bytes = receiveMessage(socket_communicate, message, MSG_WAITFORONE);
+		bytes = receiveMessage(socket_communicate, message, MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return -1;
 		}
@@ -167,7 +161,7 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 bool Connection::exit() const {
 	const std::string& command_exit = commands[2];
 
-	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM) > 0;
+	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM | MSG_NOSIGNAL) > 0;
 }
 
 bool Connection::isConnection() const {
@@ -183,13 +177,13 @@ void Connection::handleServer() {
 
 	while (isConnection()) {
 		std::string command;
-		receiveMessage(socket_listen, command, MSG_DONTWAIT);
+		receiveMessage(socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
 		if (command == command_list) {
 			bytes = sendList(socket_listen);
 			if (bytes < 0) {
 				std::cout << std::endl << "[-] Error: Failed send list of files." << std::endl;
-				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 			}
 		} else if (command.substr(0, 4) == command_get) {
 			std::istringstream iss(command.substr(4));
@@ -201,7 +195,7 @@ void Connection::handleServer() {
 			}
 
 			if (tokens.size() < 3) {
-				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				continue;
 			}
@@ -214,7 +208,7 @@ void Connection::handleServer() {
 				size = static_cast<int64_t>(std::stoull(tokens[1]));
 				stream << tokens[2];
 			} catch (const std::exception& err) {
-				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
 				return;
 			}
@@ -227,7 +221,7 @@ void Connection::handleServer() {
 
 			bytes = sendFile(socket_listen, filename, offset, size);
 			if (bytes == -1) {
-				sendMessage(socket_listen, command_error, MSG_CONFIRM);
+				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << std::endl << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
 			} else if (bytes == -2) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM);
@@ -254,7 +248,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_
 		const int64_t bytes_to_read = std::min<int64_t>(BUFFER_SIZE, size - total_bytes);
 		file.read(reinterpret_cast<char*>(buffer), bytes_to_read);
 
-		const int64_t bytes = sendBytes(socket, buffer, bytes_to_read, MSG_CONFIRM);
+		const int64_t bytes = sendBytes(socket, buffer, bytes_to_read, MSG_CONFIRM | MSG_NOSIGNAL);
 		if (bytes < 0) {
 			return -1;
 		}
@@ -283,12 +277,12 @@ int64_t Connection::sendList(int32_t socket) {
 
 	message_size = std::to_string(data.size()) + ':';
 
-	bytes = sendMessage(socket, message_size, MSG_CONFIRM);
+	bytes = sendMessage(socket, message_size, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, data, MSG_CONFIRM);
+	bytes = sendMessage(socket, data, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}

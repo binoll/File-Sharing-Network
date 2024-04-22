@@ -36,7 +36,7 @@ class Connection {
 
 	int64_t sendFile(int32_t, const std::string&);
 
-	std::vector<std::pair<int32_t, int32_t>> findFd(const std::string&);
+	std::vector<std::pair<int32_t, int32_t>> findSocket(const std::string& filename);
 
 	std::vector<std::string> getListFiles();
 

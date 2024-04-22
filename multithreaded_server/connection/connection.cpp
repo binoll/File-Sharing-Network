@@ -223,7 +223,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	std::string message;
 	const std::string& command_error = commands[3];
 
-	bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE | MSG_NOSIGNAL);
+	bytes = receiveMessage(client_socket_listen, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
@@ -265,7 +265,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			break;
 		}
 
-		bytes = receiveMessage(client_socket_listen, message, MSG_WAITFORONE | MSG_NOSIGNAL);
+		bytes = receiveMessage(client_socket_listen, message, MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
@@ -291,12 +291,7 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message_size, MSG_CONFIRM | MSG_NOSIGNAL);
-	if (bytes < 0) {
-		return -1;
-	}
-
-	bytes = sendMessage(socket, list, MSG_CONFIRM | MSG_NOSIGNAL);
+	bytes = sendMessage(socket, message_size + list, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
@@ -309,7 +304,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	int64_t message_size = getSize(filename);
 	std::string real_filename;
 	std::string message;
-	std::vector<std::pair<int32_t, int32_t>> sockets = findFd(filename);
+	std::vector<std::pair<int32_t, int32_t>> sockets = findSocket(filename);
 	const std::string& command_error = commands[3];
 
 	if (isFilenameChanged(filename)) {
@@ -346,7 +341,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
 		struct timeval timeout { };
-		timeout.tv_sec = 5;
+		timeout.tv_sec = 10;
 		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + real_filename;
 
 		std::remove_if(
@@ -372,7 +367,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			continue;
 		}
 
-		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE | MSG_NOSIGNAL);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -391,7 +386,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	return total_bytes;
 }
 
-std::vector<std::pair<int32_t, int32_t>> Connection::findFd(const std::string& filename) {
+std::vector<std::pair<int32_t, int32_t>> Connection::findSocket(const std::string& filename) {
 	std::vector<std::pair<int32_t, int32_t>> vector;
 	std::lock_guard<std::mutex> lock(mutex_storage);
 

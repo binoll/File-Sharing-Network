@@ -2,6 +2,8 @@
 #pragma once
 
 #include <unordered_map>
+#include <coroutine>
+#include <optional>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -25,6 +27,7 @@
 
 #include <boost/crc.hpp>
 #include <boost/coroutine/all.hpp>
+#include <boost/asio.hpp>
 
 #define BUFFER_SIZE 1024
 

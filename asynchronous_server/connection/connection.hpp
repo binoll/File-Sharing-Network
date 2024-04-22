@@ -22,8 +22,8 @@ class Connection {
 
 	void handleClients();
 
-	void processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield,
-	                      std::pair<int32_t, int32_t>& pair);
+	void processingClient(boost::coroutines::asymmetric_coroutine<void>::push_type&,
+	                      std::pair<int32_t, int32_t>);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
@@ -39,9 +39,9 @@ class Connection {
 
 	int64_t sendList(int32_t);
 
-	int64_t sendFile(int32_t, const std::string&);
+	int64_t sendFile(boost::coroutines::asymmetric_coroutine<int64_t>::push_type&, int32_t, const std::string&);
 
-	std::vector<std::pair<int32_t, int32_t>> findFd(const std::string&);
+	std::vector<std::pair<int32_t, int32_t>> findSocket(const std::string&);
 
 	std::vector<std::string> getListFiles();
 
@@ -65,5 +65,4 @@ class Connection {
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
 	std::vector<std::pair<int32_t, int32_t>> sockets;
-	std::mutex mutex;
 };

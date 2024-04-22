@@ -87,32 +87,35 @@ bool Connection::isConnect(std::pair<int32_t, int32_t> pair) {
 	return checkConnection(pair.first) && checkConnection(pair.second);
 }
 
-void Connection::hasDataToRead(boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield) {
+void Connection::hasDataToRead(
+		boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield
+) {
+	fd_set fds;
+	FD_ZERO(&fds);
+	int32_t maxfd_listen = 0;
+
 	while (true) {
-		fd_set fds;
-		FD_ZERO(&fds);
-		int32_t maxfd_listen = 0;
-		int32_t maxfd_communicate = 0;
-		std::lock_guard<std::mutex> lock(mutex);
 
 		for (const auto& pair : sockets) {
 			FD_SET(pair.first, &fds);
 			maxfd_listen = std::max(maxfd_listen, pair.first);
-			FD_SET(pair.second, &fds);
-			maxfd_communicate = std::max(maxfd_communicate, pair.second);
+		}
 
-			struct timeval timeout { };
-			timeout.tv_sec = 0;
-			timeout.tv_usec = 0;
+		struct timeval timeout { };
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 0;
 
-			int32_t result = select(std::max(maxfd_listen, maxfd_communicate) + 1, &fds, nullptr, nullptr, &timeout);
+		int32_t result = select(maxfd_listen + 1, &fds, nullptr, nullptr, &timeout);
 
-			if (result < 0) {
-				yield({-1, -1});
-			} else if (result == 0) {
-				yield({0, 0});
-			} else {
-				yield({maxfd_listen, maxfd_communicate});
+		if (result < 0) {
+			yield({-1, -1});
+		} else if (result == 0) {
+			yield({0, 0});
+		} else {
+			for (const auto& pair : sockets) {
+				if (FD_ISSET(pair.first, &fds)) {
+					yield(pair);
+				}
 			}
 		}
 	}
@@ -154,34 +157,40 @@ bool Connection::checkConnection(int32_t socket) {
 
 void Connection::handleClients() {
 	std::pair<int32_t, int32_t> pair;
-	std::pair<int32_t, int32_t> invalid_pair = {-1, -1};
 	std::pair<int32_t, int32_t> empty_pair = {0, 0};
+	std::pair<int32_t, int32_t> invalid_pair = {-1, -1};
 
 	while (true) {
-		boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::pull_type coroutine_get_sockets(
+		if (sockets.empty()) {
+			continue;
+		}
+
+		boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::pull_type coroutine_read(
 				[&](boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield) {
 					hasDataToRead(yield);
-				});
-		pair = coroutine_get_sockets().get();
+				}
+		);
+		pair = coroutine_read.get();
 
-		if (sockets.empty() || pair == empty_pair) {
+		if (isConnect(pair) && pair == empty_pair) {
 			continue;
-		} else if (!isConnect(pair) || pair == invalid_pair) {
+		} else if (!isConnect(pair) && pair == invalid_pair) {
 			removeClients(pair);
 			std::cout << "[+] Success: Client disconnected." << std::endl;
 			continue;
 		}
 
-		boost::coroutines::asymmetric_coroutine<void>::push_type coroutine_processing(
-				[&](boost::coroutines::asymmetric_coroutine<void>::pull_type& yield) {
+		boost::coroutines::asymmetric_coroutine<void>::pull_type coroutine_processing(
+				[&](boost::coroutines::asymmetric_coroutine<void>::push_type& yield) {
 					processingClient(yield, pair);
-				});
+				}
+		);
 		coroutine_processing();
 	}
 }
 
-void Connection::processingClient(boost::coroutines::asymmetric_coroutine<void>::pull_type& yield,
-                                  std::pair<int32_t, int32_t>& pair) {
+void Connection::processingClient(boost::coroutines::asymmetric_coroutine<void>::push_type& yield,
+                                  std::pair<int32_t, int32_t> pair) {
 	int64_t bytes;
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1] + ':';
@@ -189,34 +198,39 @@ void Connection::processingClient(boost::coroutines::asymmetric_coroutine<void>:
 	const std::string& command_error = commands[3];
 	std::string command;
 
-	while (true) {
-		receiveMessage(pair.first, command, MSG_DONTWAIT | MSG_NOSIGNAL);
+	receiveMessage(pair.first, command, MSG_NOSIGNAL);
 
-		if (command == command_list) {
-			bytes = sendList(pair.first);
-			if (bytes < 0) {
-				sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << "[-] Error: Failed send the list of files." << std::endl;
-			} else {
-				std::cout << "[+] Success: List sent successfully." << std::endl;
-			}
-		} else if (command.find(command_get) != std::string::npos) {
-			std::vector<std::string> tokens;
-			split(command, tokens);
-			std::string filename = tokens[1];
+	if (command == command_list) {
+		bytes = sendList(pair.first);
 
-			bytes = sendFile(pair.first, filename);
-			if (bytes < 0) {
-				sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
-			} else {
-				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
-			}
-		} else if (command == command_exit) {
-			return;
+		if (bytes < 0) {
+			sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
+			std::cout << "[-] Error: Failed send the list of files." << std::endl;
+		} else {
+			std::cout << "[+] Success: List sent successfully." << std::endl;
 		}
-		yield();
+	} else if (command.find(command_get) != std::string::npos) {
+		std::vector<std::string> tokens;
+		split(command, tokens);
+		std::string filename = tokens[1];
+
+		boost::coroutines::asymmetric_coroutine<int64_t>::pull_type coroutine_send_file(
+				[&](boost::coroutines::asymmetric_coroutine<int64_t>::push_type& yield) {
+					sendFile(yield, pair.first, filename);
+				}
+		);
+
+		bytes = coroutine_send_file().get();
+		if (bytes < 0) {
+			sendMessage(pair.first, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
+			std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
+		} else {
+			std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
+		}
+	} else if (command == command_exit) {
+		removeClients(pair);
 	}
+	yield();
 }
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
@@ -281,9 +295,8 @@ bool Connection::synchronization(std::pair<int32_t, int32_t>& pair) {
 	int64_t bytes;
 	std::string message;
 	const std::string& command_error = commands[3];
-	std::lock_guard<std::mutex> lock(mutex);
 
-	bytes = receiveMessage(pair.first, message, MSG_WAITFORONE | MSG_NOSIGNAL);
+	bytes = receiveMessage(pair.first, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
@@ -324,7 +337,7 @@ bool Connection::synchronization(std::pair<int32_t, int32_t>& pair) {
 			break;
 		}
 
-		bytes = receiveMessage(pair.first, message, MSG_WAITFORONE | MSG_NOSIGNAL);
+		bytes = receiveMessage(pair.first, message, MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
@@ -350,25 +363,21 @@ int64_t Connection::sendList(int32_t socket) {
 		return -1;
 	}
 
-	bytes = sendMessage(socket, message_size, MSG_CONFIRM | MSG_NOSIGNAL);
-	if (bytes < 0) {
-		return -1;
-	}
-
-	bytes = sendMessage(socket, list, MSG_CONFIRM | MSG_NOSIGNAL);
+	bytes = sendMessage(socket, message_size + list, MSG_CONFIRM | MSG_NOSIGNAL);
 	if (bytes < 0) {
 		return -1;
 	}
 	return bytes + static_cast<int64_t>(message_size.size());
 }
 
-int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
+int64_t Connection::sendFile(boost::coroutines::asymmetric_coroutine<int64_t>::push_type& yield,
+                             int32_t socket, const std::string& filename) {
 	int64_t bytes;
 	int64_t total_bytes = 0;
 	int64_t message_size = getSize(filename);
 	std::string real_filename;
 	std::string message;
-	std::vector<std::pair<int32_t, int32_t>> sockets_filename = findFd(filename);
+	std::vector<std::pair<int32_t, int32_t>> sockets_filename = findSocket(filename);
 	const std::string& command_error = commands[3];
 
 	if (isFilenameChanged(filename)) {
@@ -431,7 +440,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 			continue;
 		}
 
-		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_WAITFORONE | MSG_NOSIGNAL);
+		bytes = receiveBytes(client_socket_communicate, buffer, chunk_size, MSG_NOSIGNAL);
 		if (bytes < 0) {
 			continue;
 		}
@@ -444,13 +453,13 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		if (bytes < 0) {
 			continue;
 		}
-
 		total_bytes += bytes;
+		yield(bytes);
 	}
 	return total_bytes;
 }
 
-std::vector<std::pair<int32_t, int32_t>> Connection::findFd(const std::string& filename) {
+std::vector<std::pair<int32_t, int32_t>> Connection::findSocket(const std::string& filename) {
 	std::vector<std::pair<int32_t, int32_t>> vector;
 
 	for (const auto& entry : storage) {
@@ -464,7 +473,7 @@ std::vector<std::pair<int32_t, int32_t>> Connection::findFd(const std::string& f
 }
 
 std::vector<std::string> Connection::getListFiles() {
-	std::unordered_map<std::string, int> filename_counts;
+	std::unordered_map<std::string, int32_t> filename_counts;
 	std::vector<std::string> unique_filenames;
 	std::vector<std::string> duplicate_filenames;
 
