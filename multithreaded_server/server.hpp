@@ -10,4 +10,5 @@ struct FileInfo {
 	std::string hash;
 	std::string filename;
 	bool is_filename_changed;
+	bool is_filename_modify;
 };

@@ -52,9 +52,9 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		std::cout << "[*] Enter the IP address: ";
 		std::cin >> ip;
 		std::cout << "[*] Enter the port for communication: ";
-		std::cin >> port_listen;
+		std::cin >> str_port_listen;
 		std::cout << "[*] Enter the port for listening: ";
-		std::cin >> port_communicate;
+		std::cin >> str_port_communicate;
 
 		try {
 			port_listen = std::stoi(str_port_listen);
@@ -115,7 +115,7 @@ void CommandLine::run() {
 }
 
 void CommandLine::setConsoleColor(const ConsoleColor& color) {
-	std::cout << "\033[" << static_cast<int>(color) << "m";
+	std::cout << "\033[" << static_cast<int32_t>(color) << "m";
 }
 
 std::string CommandLine::getColorString(const ConsoleColor& color) {

@@ -34,7 +34,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cout << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	
+
 	if (connect(socket_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
 		std::cout << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
@@ -44,7 +44,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cout << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
-	
+
 	if (connect(socket_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate),
 	            sizeof(addr_communicate)) < 0) {
 		std::cout << "[-] Error: Failed connect to the server." << std::endl;
@@ -71,6 +71,8 @@ int64_t Connection::getFile(const std::string& filename) {
 	std::string message;
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
+	const std::string& command_exist = commands[4];
+	std::ofstream file;
 
 	if (isFileExist(filename)) {
 		return -2;
@@ -84,9 +86,11 @@ int64_t Connection::getFile(const std::string& filename) {
 	bytes = receiveMessage(socket_communicate, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return -1;
+	} else if (message == command_exist) {
+		return -2;
 	}
 
-	std::ofstream file(filename, std::ios::binary);
+	file = std::ofstream(filename, std::ios::binary);
 	if (!file.is_open()) {
 		return -1;
 	}

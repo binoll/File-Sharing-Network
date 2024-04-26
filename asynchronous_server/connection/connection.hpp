@@ -57,7 +57,7 @@ class Connection {
 
 	static std::string removeIndex(std::string);
 
-	bool isFilenameChanged(const std::string&);
+	bool isFilenameModify(const std::string& filename);
 
 	int32_t socket_listen { };
 	int32_t socket_communicate { };

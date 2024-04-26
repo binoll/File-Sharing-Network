@@ -377,7 +377,7 @@ int64_t Connection::sendFile(boost::coroutines::asymmetric_coroutine<int64_t>::p
 	std::vector<std::pair<int32_t, int32_t>> sockets_filename = findSocket(filename);
 	const std::string& command_error = commands[3];
 
-	if (isFilenameChanged(filename)) {
+	if (isFilenameModify(filename)) {
 		real_filename = removeIndex(filename);
 	} else {
 		real_filename = filename;
@@ -571,7 +571,7 @@ std::string Connection::removeIndex(std::string filename) {
 	return filename;
 }
 
-bool Connection::isFilenameChanged(const std::string& filename) {
+bool Connection::isFilenameModify(const std::string& filename) {
 	for (auto& entry : storage) {
 		if (entry.second.filename == filename) {
 			return entry.second.is_filename_changed;
