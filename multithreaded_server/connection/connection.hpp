@@ -24,9 +24,9 @@ class Connection {
 
 	static int64_t receiveMessage(int32_t, std::string&, int32_t);
 
-	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	static int64_t sendBytes(int32_t, const char*, int64_t, int32_t);
 
-	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	static int64_t receiveBytes(int32_t, char*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -59,5 +59,6 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
+	std::vector<std::thread> threads;
 	std::mutex mutex_storage;
 };

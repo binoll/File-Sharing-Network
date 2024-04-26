@@ -24,8 +24,13 @@ void Connection::waitConnection() {
 	socket_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-	if (socket_listen < 0 || socket_communicate < 0) {
-		std::cout << "[-] Error: Failed to create socket." << std::endl;
+	if (socket_listen < 0) {
+		std::cout << "[-] Error: Failed to create socket for listen." << std::endl;
+		return;
+	}
+
+	if (socket_communicate < 0) {
+		std::cout << "[-] Error: Failed to create socket for communicate." << std::endl;
 		return;
 	}
 
@@ -70,7 +75,8 @@ void Connection::waitConnection() {
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
 				<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
 				<< client_addr_communicate.sin_port << '.' << std::endl;
-		std::thread(&Connection::handleClients, this, client_socket_listen, client_socket_communicate).detach();
+		std::thread thread(&Connection::handleClients, this, client_socket_listen, client_socket_communicate);
+		thread.detach();
 	}
 }
 
@@ -120,11 +126,10 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	const std::string& command_error = commands[3];
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
-		std::cout << "[-] Error: The storage could not be synchronized." << std::endl;
+		std::cout << "[-] Error: Client disconnected. The storage could not be synchronized." << std::endl;
+		removeClients(std::pair(client_socket_listen, client_socket_communicate));
 		close(client_socket_listen);
 		close(client_socket_communicate);
-		removeClients(std::pair(client_socket_listen, client_socket_communicate));
-		std::cout << "[+] Success: Client disconnected." << std::endl;
 		return;
 	}
 
@@ -154,20 +159,18 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			break;
 		}
 	}
+	removeClients(std::pair(client_socket_listen, client_socket_communicate));
 	close(client_socket_listen);
 	close(client_socket_communicate);
-	removeClients(std::pair(client_socket_listen, client_socket_communicate));
 	std::cout << "[+] Success: Client disconnected." << std::endl;
 }
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
 	int64_t bytes;
-	std::byte buffer[message.size()];
 
-	std::memcpy(buffer, message.data(), message.size());
 	bytes = sendBytes(
 			socket,
-			buffer,
+			message.data(),
 			static_cast<int64_t>(message.size()),
 			flags
 	);
@@ -176,7 +179,7 @@ int64_t Connection::sendMessage(int32_t socket, const std::string& message, int3
 
 int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t flags) {
 	int64_t bytes;
-	std::byte buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 
 	bytes = receiveBytes(socket, buffer, BUFFER_SIZE, flags);
 	if (bytes > 0) {
@@ -185,14 +188,14 @@ int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t
 	return bytes;
 }
 
-int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t size, int32_t flags) {
+int64_t Connection::sendBytes(int32_t socket, const char* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
 
 	bytes = send(socket, buffer, size, flags);
 	return bytes;
 }
 
-int64_t Connection::receiveBytes(int32_t socket, std::byte* buffer, int64_t size, int32_t flags) {
+int64_t Connection::receiveBytes(int32_t socket, char* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
 
 	bytes = recv(socket, buffer, size, flags);
@@ -218,8 +221,8 @@ int64_t Connection::processResponse(std::string& message) {
 }
 
 bool Connection::synchronization(int32_t client_socket_listen, int32_t client_socket_communicate) {
-	int64_t message_size;
 	int64_t bytes;
+	int64_t message_size;
 	std::string message;
 	const std::string& command_error = commands[3];
 
@@ -337,10 +340,11 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += bytes) {
-		std::byte buffer[BUFFER_SIZE];
+		char buffer[BUFFER_SIZE];
+		struct timeval timeout { };
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
-		struct timeval timeout { };
+
 		timeout.tv_sec = 10;
 		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + real_filename;
 
