@@ -5,8 +5,14 @@ Connection::Connection(std::string dir) : dir(std::move(dir)) {
 	socket_listen = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-	if (socket_listen < 0 || socket_communicate < 0) {
-		std::cout << "[-] Error: Failed to create socket." << std::endl;
+	if (socket_listen < 0) {
+		std::cout << "[-] Error: Failed to create socket for listen." << std::endl;
+		return;
+	}
+
+	if (socket_communicate < 0) {
+		std::cout << "[-] Error: Failed to create socket for communicate." << std::endl;
+		return;
 	}
 }
 
@@ -28,6 +34,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cout << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
+	
 	if (connect(socket_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
 		std::cout << "[-] Error: Failed connect to the server." << std::endl;
 		return false;
@@ -37,6 +44,7 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		std::cout << "[-] Error: Invalid server address." << std::endl;
 		return false;
 	}
+	
 	if (connect(socket_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate),
 	            sizeof(addr_communicate)) < 0) {
 		std::cout << "[-] Error: Failed connect to the server." << std::endl;
@@ -59,7 +67,7 @@ int64_t Connection::getFile(const std::string& filename) {
 	int64_t total_bytes;
 	int64_t bytes;
 	int64_t message_size;
-	std::byte buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 	std::string message;
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
@@ -160,7 +168,6 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 
 bool Connection::exit() const {
 	const std::string& command_exit = commands[2];
-
 	return sendMessage(socket_communicate, command_exit, MSG_CONFIRM | MSG_NOSIGNAL) > 0;
 }
 
@@ -235,7 +242,7 @@ void Connection::handleServer() {
 
 int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_t offset, int64_t size) {
 	std::ifstream file(filename, std::ios::binary);
-	std::byte buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 	int64_t total_bytes = 0;
 
 	if (!file.is_open()) {
@@ -292,12 +299,12 @@ int64_t Connection::sendList(int32_t socket) {
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
 	int64_t bytes;
-	std::byte buffer[message.size()];
+	char buffer[message.size()];
 
 	std::memcpy(buffer, message.data(), message.size());
 	bytes = sendBytes(
 			socket,
-			buffer,
+			message.data(),
 			static_cast<int64_t>(message.size()),
 			flags
 	);
@@ -306,7 +313,7 @@ int64_t Connection::sendMessage(int32_t socket, const std::string& message, int3
 
 int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t flags) {
 	int64_t bytes;
-	std::byte buffer[BUFFER_SIZE];
+	char buffer[BUFFER_SIZE];
 
 	bytes = receiveBytes(socket, buffer, sizeof(buffer), flags);
 	if (bytes > 0) {
@@ -315,14 +322,14 @@ int64_t Connection::receiveMessage(int32_t socket, std::string& message, int32_t
 	return bytes;
 }
 
-int64_t Connection::sendBytes(int32_t socket, const std::byte* buffer, int64_t size, int32_t flags) {
+int64_t Connection::sendBytes(int32_t socket, const char* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
 
 	bytes = send(socket, buffer, size, flags);
 	return bytes;
 }
 
-int64_t Connection::receiveBytes(int32_t socket, std::byte* buffer, int64_t size, int32_t flags) {
+int64_t Connection::receiveBytes(int32_t socket, char* buffer, int64_t size, int32_t flags) {
 	int64_t bytes;
 
 	bytes = recv(socket, buffer, size, flags);
@@ -376,7 +383,7 @@ std::vector<std::string> Connection::getListFiles() {
 	return vector;
 }
 
-uint64_t Connection::getFileSize(const std::string& filename) {
+int64_t Connection::getFileSize(const std::string& filename) {
 	std::ifstream file(filename, std::ios::binary | std::ios::ate);
 
 	if (!file.is_open()) {
@@ -394,7 +401,7 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 		return "";
 	}
 
-	std::byte buffer[4 * BUFFER_SIZE];
+	char buffer[10 * BUFFER_SIZE];
 	while (file.read(reinterpret_cast<char*>(buffer), sizeof(buffer))) {
 		crc32.process_bytes(buffer, sizeof(buffer));
 	}

@@ -3,16 +3,6 @@
 
 #include "../client.hpp"
 
-/*
- * Commands from the server:
- * 1. list - send storage of clients.
- * 2. part:offset:size:file_name - send part of the file.
- *
- *  Commands to server:
- *  1. getListFiles (file_name:[hash]) - send storage of clients.
- *  2. get:file_name - download the file.
- *  3. exit - close connection with server.
- */
 class Connection {
  public:
 	explicit Connection(std::string);
@@ -40,9 +30,9 @@ class Connection {
 
 	static int64_t receiveMessage(int32_t, std::string&, int32_t);
 
-	static int64_t sendBytes(int32_t, const std::byte*, int64_t, int32_t);
+	static int64_t sendBytes(int32_t, const char*, int64_t, int32_t);
 
-	static int64_t receiveBytes(int32_t, std::byte*, int64_t, int32_t);
+	static int64_t receiveBytes(int32_t, char*, int64_t, int32_t);
 
 	static int64_t processResponse(std::string&);
 
@@ -50,7 +40,7 @@ class Connection {
 
 	std::vector<std::string> getListFiles();
 
-	static uint64_t getFileSize(const std::string&);
+	static int64_t getFileSize(const std::string&);
 
 	static std::string calculateFileHash(const std::string&);
 
