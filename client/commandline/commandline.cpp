@@ -8,6 +8,9 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 	std::cout << "+=========================+" << std::endl;
 
 	while (true) {
+		std::string str;
+		int32_t choice;
+
 		std::cout << "[*] List of console colors:" << std::endl;
 		std::cout << "1. Black" << std::endl;
 		std::cout << "2. Red" << std::endl;
@@ -19,8 +22,14 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		std::cout << "8. White" << std::endl;
 		std::cout << "[*] Enter text color: ";
 
-		int choice;
-		std::cin >> choice;
+		std::cin >> str;
+
+		try {
+			choice = std::stoi(str);
+		} catch (const std::exception&) {
+			std::cout << "[-] Error: Invalid color choice." << std::endl;
+			continue;
+		}
 
 		if (choice >= 1 && choice <= 8) {
 			auto color = static_cast<ConsoleColor>(choice + static_cast<int>(ConsoleColor::Black) - 1);
@@ -35,6 +44,8 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 	while (true) {
 		std::string ip;
+		std::string str_port_listen;
+		std::string str_port_communicate;
 		int32_t port_listen;
 		int32_t port_communicate;
 
@@ -44,6 +55,14 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 		std::cin >> port_listen;
 		std::cout << "[*] Enter the port for listening: ";
 		std::cin >> port_communicate;
+
+		try {
+			port_listen = std::stoi(str_port_listen);
+			port_communicate = std::stoi(str_port_communicate);
+		} catch (const std::exception&) {
+			std::cout << "[-] Error: The connection could not be established. Port is invalid!" << std::endl;
+			continue;
+		}
 
 		if (!connection.connectToServer(ip, port_listen, port_communicate)) {
 			std::cout << "[-] Error: The connection could not be established." << std::endl;

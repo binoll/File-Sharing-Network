@@ -65,12 +65,12 @@ void Connection::waitConnection() {
 		                                   &addr_communicate_len);
 		client_socket_listen = accept(socket_listen, reinterpret_cast<struct sockaddr*>(&client_addr_listen),
 		                              &addr_listen_len);
+		pair = {client_socket_listen, client_socket_communicate};
 
 		if (client_socket_listen < 0 || client_socket_communicate < 0) {
 			continue;
 		}
 
-		pair = {client_socket_listen, client_socket_communicate};
 		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
 				<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
 				<< client_addr_communicate.sin_port << '.' << std::endl;
@@ -87,15 +87,12 @@ bool Connection::isConnect(std::pair<int32_t, int32_t> pair) {
 	return checkConnection(pair.first) && checkConnection(pair.second);
 }
 
-void Connection::hasDataToRead(
-		boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield
-) {
+void Connection::hasDataToRead(boost::coroutines::asymmetric_coroutine<std::pair<int32_t, int32_t>>::push_type& yield) {
 	fd_set fds;
 	FD_ZERO(&fds);
 	int32_t maxfd_listen = 0;
 
 	while (true) {
-
 		for (const auto& pair : sockets) {
 			FD_SET(pair.first, &fds);
 			maxfd_listen = std::max(maxfd_listen, pair.first);
