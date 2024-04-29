@@ -54,7 +54,7 @@ class Connection {
 
 	bool isFilenameModify(const std::string&);
 
-	bool isFilenameChange(const std::string&);
+	bool isFilenameChange(int32_t, const std::string&);
 
 	int32_t socket_listen { };
 	int32_t socket_communicate { };

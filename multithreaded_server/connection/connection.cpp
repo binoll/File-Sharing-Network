@@ -317,7 +317,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 		real_filename = filename;
 	}
 
-	if (isFilenameChange(filename)) {
+	if (isFilenameChange(socket, filename)) {
 		sendMessage(socket, command_exist, MSG_CONFIRM | MSG_NOSIGNAL);
 		return 0;
 	}
@@ -532,11 +532,11 @@ bool Connection::isFilenameModify(const std::string& filename) {
 	return false;
 }
 
-bool Connection::isFilenameChange(const std::string& filename) {
+bool Connection::isFilenameChange(int32_t socket, const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto& entry : storage) {
-		if (entry.second.filename == filename) {
+		if (entry.second.filename == filename && (entry.first.first == socket || entry.first.second == socket)) {
 			return entry.second.is_filename_changed;
 		}
 	}

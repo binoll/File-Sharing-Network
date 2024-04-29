@@ -3,6 +3,5 @@ project(P2P_network)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_subdirectory(asynchronous_server)
 add_subdirectory(multithreaded_server)
 add_subdirectory(client)
