@@ -1,26 +1,31 @@
 # File sharing network
 
 ## Overview
+# Task №1 (P2P-файлообменная сеть):
+Клиенты подключаются к серверу по протоколу TCP, после подключения
+они автоматически отправляют на сервер хранилище имен
+общих файлов (хранящихся в той же папке), а также хэши для
+содержимого этих файлов. Если содержимое файлов совпадает,
+их хэши совпадают, и сервер сохраняет хранилище уникальных файлов в
+сети.
 
-Clients connect to the server via TCP, after connecting,
-they automatically send to the server a storage of names
-of shared files (stored in the same folder), as well as hashes for
-the contents of these files. If the contents of the files match,
-their hashes match, and the server stores a storage of unique files on the
-network.
+Клиент может запросить хранилище файлов, совместно используемых в сети
+, и начать загрузку любого из них через сервер. Если
+один и тот же загруженный файл находится на 2 или более клиентах,
+загрузка осуществляется одновременно со всех клиентов, чередуя блоки по
+1 кбайт. Таким образом, каждый клиент передает файл в сеть только частично. 
 
-The client can request a storage of files shared on the network
-and start downloading any of them through the server. If
-the same downloaded file is located on 2 or more clients,
-the download is carried out simultaneously from all clients, alternating blocks by
-1kb. Thus, each client gives the file to the network only partially. Commands in the user console: **list** - 
-list of shared files, **get "file_name"** - download the "file_name", **exit** - exit from app,
-**help** - print possible commands.
+Команды в пользовательской консоли: **list** -
+список общих файлов, **get "filename"** - загрузить файл, **exit** - выйти из приложения,
+**help** - вывести возможные команды.
 
-It has been implemented: multithreaded and asynchronous servers.
+# Task №2 (MITM коммутатор):
+
+MITM коммутатор модифицирует указатель срочности в TCP сегменте.
+
 ## Dependencies
 ```bash
-sudo apt-get install libboost-all-dev
+sudo apt install libboost-all-dev libpcap-dev -y 
 ```
 
 ## Build
@@ -42,7 +47,7 @@ To start the multithreaded server:
 To start the asynchronous server:
 
 ```bash
-./build/asynchronous_server/asynchronous_server
+python3 ../asynchronous_server/asynchronous_server.py
 ```
 
 To start the client:
