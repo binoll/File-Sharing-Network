@@ -21,17 +21,54 @@ class FileInfo:
 
 class Connection:
     def __init__(self):
-        self.socket_listen = None
-        self.socket_communicate = None
-
-    def __del__(self):
-        if self.socket_listen:
-            self.socket_listen.close()
-        if self.socket_communicate:
-            self.socket_communicate.close()
+        self.storage: Dict[Tuple[int, int], FileInfo]
+        self.addr_listen = ('0.0.0.0', 0)
+        self.addr_communicate = ('0.0.0.0', 0)
+        self.loop = asyncio.get_event_loop()
 
     async def wait_connection(self):
-        pass
+        await asyncio.gather(
+            self.listen(self.addr_listen, self.addr_communicate)
+        )
+
+    async def listen(self, addr_listen: Tuple[str, int], addr_communicate: Tuple[str, int]):
+        socket_communicate = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket_communicate.bind(addr_communicate)
+        socket_communicate.listen(BACKLOG)
+
+        socket_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket_listen.bind(addr_listen)
+        socket_listen.listen(BACKLOG)
+
+        print(f'[*] Server is listening on ports: {addr_communicate[1]}, {addr_listen[1]}.')
+
+        while True:
+            client_socket_communicate, client_addr_communicate = await self.loop.sock_accept(socket_communicate)
+            client_socket_listen, client_addr_listen = await self.loop.sock_accept(socket_listen)
+
+            print(f'[+] Success: Client connected: {client_addr_listen[0]}:{client_addr_listen[1]},'
+                  f' {client_addr_communicate[0]}:{client_addr_communicate[1]}.')
+
+            await asyncio.gather(self.synchronization(client_socket_listen, client_socket_communicate))
+            await asyncio.create_task(self.handle_clients(client_socket_listen, client_socket_communicate))
+
+    async def handle_clients(self, client_socket_listen: socket.socket, client_socket_communicate: socket.socket):
+        while True:
+            command = await self.receive_message(client_socket_listen)
+
+            if not command:
+                break
+
+            if command == commands[0]:
+                self.send_list(client_socket_listen)
+            elif command.startswith(commands[1]):
+                _, filename = command.split(":")
+                self.send_file(client_socket, filename)
+            elif command == commands[2]:
+                break
+
+        client_socket.close()
+        print("[+] Success: Client disconnected.")
 
     @staticmethod
     def is_connect(client_socket_listen: socket, client_socket_communicate: socket):
@@ -44,21 +81,48 @@ class Connection:
     async def handle_clients(self, client_socket_listen: socket, client_socket_communicate: socket):
         pass
 
-    async def send_message(self, socket: socket, message: str, flags: int):
-        pass
+    async def sendMessage(self, socket, message, flags):
+        bytes = await self.sendBytes(socket, message.encode(), len(message), flags)
+        return bytes
 
-    async def receive_message(self, socket: socket, message: str, flags: int):
-        pass
+    async def receiveMessage(self, socket, flags):
+        bytes = await self.receiveBytes(socket, flags)
+        if bytes > 0:
+            return bytes.decode()
+        else:
+            return None
 
-    async def send_bytes(self, socket: socket, buffer: List, size: int, flags: int):
-        pass
+    async def sendBytes(self, socket, buffer, size, flags):
+        try:
+            writer = asyncio.StreamWriter(socket, None, None, loop=asyncio.get_running_loop())
+            writer.write(buffer)
+            await writer.drain()
+            return size
+        except Exception as e:
+            return -1
 
-    async def receive_bytes(self, socket: socket, buffer: List, size: int, flags: int):
-        pass
+    async def receiveBytes(self, socket, flags) -> bytes | int:
+        try:
+            reader = asyncio.StreamReader(loop=asyncio.get_running_loop())
+            asyncio.StreamReaderProtocol(reader)
+            await asyncio.wait_for(asyncio.start_server(lambda r, w: w.close(), port=None), timeout=None)
+            reader.set_transport(socket)
+            data = await reader.read(BUFFER_SIZE)
+            return data
+        except Exception:
+            return -1
 
     @staticmethod
-    def process_response(message: str):
-        pass
+    async def processResponse(self, message: str) -> bool | int:
+        try:
+            pos = message.find(':')
+            if pos == -1:
+                return False
+            size = int(message[:pos])
+            message = message[pos + 1:]
+            return size
+        except Exception:
+            return False
 
     async def synchronization(self, client_socket_listen: socket, client_socket_communicate: socket):
         pass
