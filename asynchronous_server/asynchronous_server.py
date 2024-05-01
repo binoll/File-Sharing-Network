@@ -23,7 +23,6 @@ class Connection:
         self.storage: Dict[Tuple[socket, socket], FileInfo] = {}
         self.addr_listen: Tuple[str, int] = ('0.0.0.0', 0)
         self.addr_communicate: Tuple[str, int] = ('0.0.0.0', 0)
-        self.loop = asyncio.get_event_loop()
         self.synchronization_lock = asyncio.Lock()
 
     async def wait_connection(self):
@@ -39,54 +38,56 @@ class Connection:
         print(f'[*] Server is listening on port for listening: {socket_listen.getsockname()[1]}.')
 
         await asyncio.gather(
-            self.accept(socket_listen, socket_communicate),
+            self.accept_connections(socket_listen, socket_communicate),
             self.handle_clients()
         )
 
-    async def accept(self, socket_listen: socket.socket, socket_communicate: socket.socket) -> None:
+    async def accept_connections(self, socket_listen, socket_communicate):
         while True:
-            client_socket_communicate, client_addr_communicate = await self.loop.sock_accept(socket_communicate)
-            client_socket_listen, client_addr_listen = await self.loop.sock_accept(socket_listen)
+            client_socket_communicate, client_addr_communicate = await asyncio.get_event_loop().sock_accept(
+                socket_communicate
+            )
+            client_socket_listen, client_addr_listen = await asyncio.get_event_loop().sock_accept(
+                socket_listen
+            )
 
             print(f'[+] Success: Client connected: {client_addr_listen[0]}:{client_addr_listen[1]},'
                   f' {client_addr_communicate[0]}:{client_addr_communicate[1]}.')
 
             async with self.synchronization_lock:
-                synchronized = await self.synchronization(client_socket_listen, client_socket_communicate)
+                synchronization = await self.synchronization(client_socket_listen, client_socket_communicate)
 
-            if synchronized is True:
-                self.sockets.append((client_socket_listen, client_socket_communicate))
-            else:
-                print('[-] Error: Client disconnected. The storage could not be synchronized.')
-                client_socket_listen.close()
-                client_socket_communicate.close()
+                if synchronization:
+                    self.sockets.append((client_socket_listen, client_socket_communicate))
+                else:
+                    print('[-] Error: Client disconnected. The storage could not be synchronized.')
+                    client_socket_listen.close()
+                    client_socket_communicate.close()
 
     async def handle_clients(self) -> None:
-        for client_socket_listen, client_socket_communicate in self.sockets:
-            if not self.is_connect(client_socket_listen, client_socket_communicate):
-                continue
+        while True:
+            for client_socket_listen, client_socket_communicate in self.sockets:
+                command = self.receive_message(client_socket_listen)
 
-            command = await self.receive_message(client_socket_listen)
+                if not command:
+                    continue
 
-            if not command:
-                continue
-
-            if command == commands[0]:
-                await self.send_list(client_socket_listen)
-            elif command.startswith(commands[1]):
-                filename = command.split(":")[1]
-                await self.send_file(client_socket_listen, filename)
-            elif command == commands[2]:
-                self.remove_clients((client_socket_listen.fileno(), client_socket_communicate.fileno()))
-                client_socket_listen.close()
-                client_socket_communicate.close()
-                print('[+] Success: Client disconnected.')
+                if command == commands[0]:
+                    await self.send_list(client_socket_listen)
+                elif command.startswith(commands[1]):
+                    filename = command.split(":")[1]
+                    await self.send_file(client_socket_listen, filename)
+                elif command == commands[2]:
+                    self.remove_clients((client_socket_listen, client_socket_communicate))
+                    client_socket_listen.close()
+                    client_socket_communicate.close()
+                    print('[+] Success: Client disconnected.')
 
     async def synchronization(self, client_socket_listen: socket.socket,
                               client_socket_communicate: socket.socket) -> bool:
         command_error = commands[3]
 
-        message = await self.receive_message(client_socket_listen)
+        message = self.receive_message(client_socket_listen)
         if not message or message == command_error:
             return False
 
@@ -94,58 +95,51 @@ class Connection:
         if message_size is None:
             return False
 
-        total_received = len(message)
-        while total_received < message_size:
-            data = await self.receive_message(client_socket_listen)
-            if not data or data == command_error:
+        while message_size > 0:
+            try:
+                for file_info in message.split(' '):
+                    filename, file_size_str, file_hash = file_info.split(':')
+                    file_size = int(file_size_str)
+                    self.store_files((client_socket_listen, client_socket_communicate), filename,
+                                     file_size, file_hash)
+            except ValueError as err:
+                print("[-] Error:", err)
                 return False
-            message += data
-            total_received += len(data)
+            except Exception as err:
+                print("[-] Error:", err)
+                return False
 
-        try:
-            for file_info in message.split(' '):
-                filename, file_size_str, file_hash = file_info.split(':')
-                file_size = int(file_size_str)
-                self.store_files((client_socket_listen.fileno(), client_socket_communicate.fileno()), filename,
-                                 file_size, file_hash)
-        except ValueError as err:
-            print("[-] Error:", err)
-            return False
-        except Exception as err:
-            print("[-] Error:", err)
-            return False
+            message_size -= len(message)
+
+            message = self.receive_message(client_socket_listen)
+            if not message or message == command_error:
+                return False
 
         self.update_storage()
         return True
 
     @staticmethod
-    def is_connect(client_socket_listen: socket, client_socket_communicate: socket) -> bool:
-        return (client_socket_listen is not None and client_socket_communicate is not None and
-                Connection.check_connection(client_socket_listen) and
-                Connection.check_connection(client_socket_communicate))
+    def send_message(self, socket: socket.socket, message: str) -> int:
+        buffer = bytearray(message.encode())
+        return self.send_bytes(socket, buffer)
 
     @staticmethod
-    def check_connection(socket: socket) -> bool:
-        return socket.fileno() != -1
-
-    async def send_message(self, socket: socket, message: str) -> None:
-        await self.send_bytes(socket, bytearray(message.encode()))
-
-    async def receive_message(self, socket: socket) -> str | None:
-        buffer = bytearray()
-        bytes_received = await self.receive_bytes(socket, buffer)
+    def receive_message(socket: socket.socket, size: int) -> str | None:
+        buffer = bytearray(size)
+        bytes_received = socket.recv_into(buffer, size)
 
         if bytes_received <= 0:
             return None
         else:
-            return str(buffer.decode())
+            return buffer.decode()
 
-    async def send_bytes(self, socket: socket, buffer: bytearray) -> None:
-        await self.loop.sock_sendall(socket, buffer)
+    @staticmethod
+    def send_bytes(socket: socket.socket, buffer: bytearray) -> int:
+        return socket.send(buffer)
 
-    async def receive_bytes(self, socket: socket, buffer: bytearray) -> int:
-        bytes_received = await self.loop.sock_recv_into(socket, buffer)
-        return bytes_received
+    @staticmethod
+    def receive_bytes(socket: socket.socket, buffer: bytearray, size: int) -> int:
+        return socket.recv_into(buffer, size)
 
     @staticmethod
     def process_response(message: str) -> int | None:
@@ -153,81 +147,90 @@ class Connection:
             pos = message.find(':')
             if pos == -1:
                 return None
+
             size = int(message[:pos])
-            message = message[pos + 1:]
             return size
-        except Exception:
+        except ValueError:
             return None
 
     async def send_list(self, socket: socket.socket) -> int:
         files = self.get_list_files()
-        list_str = ' '.join(files)
-        message_size = str(len(list_str)) + ':'
 
         try:
-            await self.send_message(socket, message_size + list_str)
-            return len(message_size)
+            list_str = ' '.join(files)
+            message_size = len(list_str)
         except Exception as e:
             print("[-] Error:", e)
             return -1
+
+        message = f'{message_size}: {list_str}'
+        bytes_sent = self.send_message(socket, message)
+        return bytes_sent + len(str(message_size) + ':')
 
     async def send_file(self, socket: socket.socket, filename: str) -> int:
-        total_bytes = 0
-        message_size = self.get_size(filename)
         command_error = commands[3]
         command_exist = commands[4]
-
-        if self.is_filename_modify(filename):
-            real_filename = self.remove_index(filename)
-        else:
-            real_filename = filename
+        message_size = self.get_size(filename)
+        real_filename = filename if not self.is_filename_modify(filename) else self.remove_index(filename)
+        total_bytes = 0
 
         if self.is_filename_change(socket, filename):
-            await self.send_message(socket, command_exist)
+            self.send_message(socket, command_exist)
             return 0
 
-        message = f"{message_size}:"
         try:
-            await self.send_message(socket, message)
+            message = f'{message_size}:'
         except Exception as e:
-            print("[-] Error:", e)
+            print('[-] Error:', e)
             return -1
 
-        for offset in range(0, message_size, BUFFER_SIZE):
-            chunk_size = min(message_size - offset, BUFFER_SIZE)
-            client_socket_communicate = self.find_socket(filename)[0][1]
-            timeout = 10
+        bytes_sent = self.send_message(socket, message)
+        if bytes_sent < 0:
+            return -1
 
-            message = f"{commands[1]}:{offset}:{chunk_size}:{real_filename}"
-            if not self.check_connection(client_socket_communicate):
-                return -1
+        sockets = self.find_socket(filename)
+        sockets = [(pair[0], pair[1]) for pair in sockets if pair[0] != socket and pair[1] != socket]
 
-            try:
-                await self.send_message(client_socket_communicate, message)
-                await asyncio.wait_for(self.receive_bytes(client_socket_communicate, chunk_size), timeout=timeout)
-                bytes_received = await self.receive_bytes(client_socket_communicate, chunk_size)
-            except asyncio.TimeoutError:
-                continue
-            except Exception as e:
-                print("[-] Error:", e)
-                continue
+        if not sockets:
+            return -1
 
-            if bytes_received < 0:
-                continue
+        for i, (_, client_socket_communicate) in enumerate(sockets):
+            for offset in range(0, message_size, BUFFER_SIZE):
+                buffer = bytearray()
+                chunk_size = min(message_size - offset, BUFFER_SIZE)
+                client_socket_communicate = sockets[i % len(sockets)][1]
 
-            if bytes_received == command_error:
-                return -2
+                message = f'{commands[1]}:{offset}:{chunk_size}:{real_filename}'
+                if not self.check_connection(client_socket_communicate):
+                    return -1
 
-            try:
-                await self.send_bytes(socket, bytes_received)
-                total_bytes += bytes_received
-            except Exception as e:
-                print("[-] Error:", e)
-                continue
+                bytes_sent = self.send_message(client_socket_communicate, message)
+                if bytes_sent < 0:
+                    continue
+
+                try:
+                    bytes_received = self.receive_bytes(client_socket_communicate, buffer)
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print('[-] Error:', e)
+                    continue
+
+                if not bytes_received:
+                    continue
+
+                if bytes_received == command_error:
+                    return -2
+
+                bytes_sent = self.send_bytes(socket, buffer)
+                if bytes_sent < 0:
+                    continue
+
+                total_bytes += bytes_sent
 
         return total_bytes
 
-    def find_socket(self, filename: str) -> List[Tuple[int, int]]:
+    def find_socket(self, filename: str) -> List[Tuple[socket.socket, socket.socket]]:
         result = []
         for key, value in self.storage.items():
             if value.filename == filename:
@@ -258,7 +261,6 @@ class Connection:
 
     def update_storage(self):
         hash_count = {}
-        filename_count = {}
         for value in self.storage.values():
             hash_count[value.hash] = hash_count.get(value.hash, 0) + 1
 
@@ -277,12 +279,12 @@ class Connection:
                     second_value.filename = first_value.filename
                     second_value.is_filename_changed = True
 
-    def store_files(self, pair: Tuple[int, int], filename: str, size: int, hash_val: str):
+    def store_files(self, pair: Tuple[socket.socket, socket.socket], filename: str, size: int, hash_val: str):
         data = FileInfo(size, hash_val, filename)
         self.storage[pair] = data
         print("[+] Success: Stored the file:", filename)
 
-    def remove_clients(self, pair: Tuple[int, int]):
+    def remove_clients(self, pair: Tuple[socket.socket, socket.socket]):
         for key, value in list(self.storage.items()):
             if key == pair:
                 filename = self.remove_index(value.filename)
@@ -305,11 +307,19 @@ class Connection:
                 return value.is_filename_modify
         return False
 
-    def is_filename_change(self, socket: Tuple[int, int], filename: str) -> bool:
+    def is_filename_change(self, socket: socket.socket, filename: str) -> bool:
         for key, value in self.storage.items():
-            if value.filename == filename and socket[0] in key or socket[1] in key:
+            if value.filename == filename and (key[0] == socket or key[1] == socket):
                 return value.is_filename_changed
         return False
+
+    @staticmethod
+    def check_connection(client_socket_communicate: socket.socket) -> bool:
+        try:
+            client_socket_communicate.getpeername()
+            return True
+        except OSError:
+            return False
 
 
 def main():
