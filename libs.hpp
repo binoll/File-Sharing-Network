@@ -2,13 +2,9 @@
 #pragma once
 
 #include <unordered_map>
-#include <coroutine>
-#include <optional>
-#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <cstring>
 #include <cstdint>
 #include <string>
 #include <thread>
@@ -18,16 +14,12 @@
 #include <list>
 #include <map>
 
-#include <sys/poll.h>
-#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <dirent.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include <boost/log/trivial.hpp>
 #include <boost/crc.hpp>
-#include <boost/coroutine/all.hpp>
-#include <boost/asio.hpp>
 
 #define BUFFER_SIZE 1024
 

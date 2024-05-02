@@ -6,12 +6,12 @@ Connection::Connection(std::string dir) : dir(std::move(dir)) {
 	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (socket_listen < 0) {
-		std::cout << "[-] Error: Failed to create socket for listen." << std::endl;
+		std::cout << "[-] Failed to create socket for listen" << std::endl;
 		return;
 	}
 
 	if (socket_communicate < 0) {
-		std::cout << "[-] Error: Failed to create socket for communicate." << std::endl;
+		std::cout << "[-] Failed to create socket for communicate" << std::endl;
 		return;
 	}
 }
@@ -31,33 +31,33 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 	addr_communicate.sin_port = htons(port_communicate);
 
 	if (inet_pton(AF_INET, ip.c_str(), &addr_listen.sin_addr) < 0) {
-		std::cout << "[-] Error: Invalid server address." << std::endl;
+		std::cout << "[-] Invalid server address" << std::endl;
 		return false;
 	}
 
 	if (connect(socket_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
-		std::cout << "[-] Error: Failed connect to the server." << std::endl;
+		std::cout << "[-] Failed connect to the server" << std::endl;
 		return false;
 	}
 
 	if (inet_pton(AF_INET, ip.c_str(), &addr_communicate.sin_addr) < 0) {
-		std::cout << "[-] Error: Invalid server address." << std::endl;
+		std::cout << "[-] Invalid server address" << std::endl;
 		return false;
 	}
 
 	if (connect(socket_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate),
 	            sizeof(addr_communicate)) < 0) {
-		std::cout << "[-] Error: Failed connect to the server." << std::endl;
+		std::cout << "[-] Failed connect to the server" << std::endl;
 		return false;
 	}
 
 	if (sendList(socket_listen) == -1) {
-		std::cout << "[-] Error: Failed send the list of files." << std::endl;
+		std::cout << "[-] Failed send the list of files" << std::endl;
 		return false;
 	}
 
-	std::cout << "[+] The connection is established: " << ip << ':' << htons(addr_listen.sin_port) << ' ' << ip << ':'
-			<< htons(addr_communicate.sin_port) << '.' << std::endl;
+	std::cout << "[+] The connection is established: " << ip << ':' << htons(addr_listen.sin_port) << ' '
+			<< ip << ':' << htons(addr_communicate.sin_port) << std::endl;
 	thread = std::thread(&Connection::handleServer, this);
 	thread.detach();
 	return true;
@@ -68,10 +68,10 @@ int64_t Connection::getFile(const std::string& filename) {
 	int64_t bytes;
 	int64_t message_size;
 	char buffer[BUFFER_SIZE];
-	std::string message;
 	const std::string command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[3];
 	const std::string& command_exist = commands[4];
+	std::string message;
 	std::ofstream file;
 
 	if (isFileExist(filename)) {
@@ -192,8 +192,8 @@ void Connection::handleServer() {
 
 		if (command == command_list) {
 			bytes = sendList(socket_listen);
-			if (bytes < 0) {
-				std::cout << std::endl << "[-] Error: Failed send list of files." << std::endl;
+			if (bytes == -1) {
+				std::cout << std::endl << "[-] Failed send list of files" << std::endl;
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 			}
 		} else if (command.substr(0, 4) == command_get) {
@@ -207,7 +207,7 @@ void Connection::handleServer() {
 
 			if (tokens.size() < 3) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
+				std::cout << std::endl << "[-] Invalid command format" << std::endl;
 				continue;
 			}
 
@@ -220,23 +220,22 @@ void Connection::handleServer() {
 				stream << tokens[2];
 			} catch (const std::exception& err) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << std::endl << "[-] Error: Invalid command format." << std::endl;
+				std::cout << std::endl << "[-] Invalid command format" << std::endl;
 				return;
 			}
 
 			for (uint64_t i = 3; i < tokens.size(); ++i) {
-				stream << ":" << tokens[i];
+				stream << ':' << tokens[i];
 			}
 
 			const std::string filename = stream.str();
-
 			bytes = sendFile(socket_listen, filename, offset, size);
 			if (bytes == -1) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << std::endl << "[-] Error: Failed to send the file: " << filename << '.' << std::endl;
+				std::cout << std::endl << "[-] Failed to send the file: " << filename << std::endl;
 			} else if (bytes == -2) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM);
-				std::cout << std::endl << "[-] Error: Failed to open the file: " << filename << '.' << std::endl;
+				std::cout << std::endl << "[-] Failed to open the file: " << filename << std::endl;
 			}
 		} else if (command == command_exit) {
 			break;
@@ -382,7 +381,7 @@ std::vector<std::string> Connection::getListFiles() {
 			}
 		}
 	} catch (const std::exception& err) {
-		std::cout << "[-] Error: " << err.what() << '.' << std::endl;
+		std::cout << err.what() << std::endl;
 	}
 	return vector;
 }
@@ -401,7 +400,7 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 	boost::crc_32_type crc32;
 
 	if (!file.is_open()) {
-		std::cout << "[-] Error: Failed to open the file." << std::endl;
+		std::cout << "[-] Failed to open the file" << std::endl;
 		return "";
 	}
 
@@ -432,7 +431,7 @@ bool Connection::isFileExist(const std::string& filename) {
 			}
 		}
 	} catch (const std::exception& err) {
-		std::cout << "[-] Error: " << err.what() << '.' << std::endl;
+		std::cout << err.what() << std::endl;
 	}
 	return false;
 }

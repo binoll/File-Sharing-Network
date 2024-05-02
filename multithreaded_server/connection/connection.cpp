@@ -25,34 +25,34 @@ void Connection::waitConnection() {
 	socket_communicate = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 	if (socket_listen < 0) {
-		std::cout << "[-] Error: Failed to create socket for listen." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] Failed to create socket for listen" << std::endl;
 		return;
 	}
 
 	if (socket_communicate < 0) {
-		std::cout << "[-] Error: Failed to create socket for communicate." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] Failed to create socket for communicate" << std::endl;
 		return;
 	}
 
 	if (bind(socket_listen, reinterpret_cast<struct sockaddr*>(&addr_listen), sizeof(addr_listen)) < 0) {
-		std::cout << "[-] Error: Failed to bind the socket for listening." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] Failed to bind the socket for listening" << std::endl;
 		return;
 	}
 
 	if (bind(socket_communicate, reinterpret_cast<struct sockaddr*>(&addr_communicate), sizeof(addr_communicate)) < 0) {
-		std::cout << "[-] Error: Failed to bind the socket for communicating." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] Failed to bind the socket for communicating" << std::endl;
 		return;
 	}
 
 	if (listen(socket_listen, BACKLOG) < 0 || listen(socket_communicate, BACKLOG) < 0) {
-		std::cout << "[-] Error: Failed to listen." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] Failed to listen" << std::endl;
 		return;
 	}
 
-	std::cout << "[*] Server is listening on port for communicate: " << htons(addr_communicate.sin_port)
-			<< '.' << std::endl;
-	std::cout << "[*] Server is listening on port for listening: " << htons(addr_listen.sin_port)
-			<< '.' << std::endl;
+	BOOST_LOG_TRIVIAL(info) << "[*] Server is listening on port for communicate: " << htons(addr_communicate.sin_port)
+				<< std::endl;
+	BOOST_LOG_TRIVIAL(info) << "[*] Server is listening on port for listening: " << htons(addr_listen.sin_port)
+				<< std::endl;
 
 	while (true) {
 		int32_t client_socket_listen;
@@ -72,9 +72,9 @@ void Connection::waitConnection() {
 			continue;
 		}
 
-		std::cout << "[+] Success: Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
-				<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
-				<< client_addr_communicate.sin_port << '.' << std::endl;
+		BOOST_LOG_TRIVIAL(info) << "[+] Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
+					<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
+					<< client_addr_communicate.sin_port << std::endl;
 		std::thread thread(&Connection::handleClients, this, client_socket_listen, client_socket_communicate);
 		thread.detach();
 	}
@@ -126,7 +126,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	const std::string& command_error = commands[3];
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
-		std::cout << "[-] Error: Client disconnected. The storage could not be synchronized." << std::endl;
+		BOOST_LOG_TRIVIAL(error) << "[-] The client cannot connect. The storage could not be synchronized" << std::endl;
 		removeClients(std::pair(client_socket_listen, client_socket_communicate));
 		close(client_socket_listen);
 		close(client_socket_communicate);
@@ -134,6 +134,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	}
 
 	while (isConnect(client_socket_listen, client_socket_communicate)) {
+		const std::string& command_exist = commands[4];
 		std::string command;
 		receiveMessage(client_socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
@@ -141,7 +142,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			bytes = sendList(client_socket_listen);
 			if (bytes < 0) {
 				sendMessage(client_socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << "[-] Error: Failed send the list of files." << std::endl;
+				BOOST_LOG_TRIVIAL(error) << "[-] Failed send the list of files" << std::endl;
 			}
 		} else if (command.find(command_get) != std::string::npos) {
 			std::vector<std::string> tokens;
@@ -149,11 +150,13 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			std::string filename = tokens[1];
 
 			bytes = sendFile(client_socket_listen, filename);
-			if (bytes < 0) {
+			if (bytes == -1) {
 				sendMessage(client_socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << "[-] Error: Failed send the file: \"" << filename << "\"." << std::endl;
+				BOOST_LOG_TRIVIAL(error) << "[-] Failed send the file: \"" << filename << "\"" << std::endl;
+			} else if (bytes == -2) {
+				sendMessage(client_socket_listen, command_exist, MSG_CONFIRM | MSG_NOSIGNAL);
 			} else {
-				std::cout << "[+] Success: File sent successfully: \"" << filename << "\"." << std::endl;
+				BOOST_LOG_TRIVIAL(info) << "[+] File sent successfully: \"" << filename << "\"" << std::endl;
 			}
 		} else if (command == command_exit) {
 			break;
@@ -162,7 +165,7 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 	removeClients(std::pair(client_socket_listen, client_socket_communicate));
 	close(client_socket_listen);
 	close(client_socket_communicate);
-	std::cout << "[+] Success: Client disconnected." << std::endl;
+	BOOST_LOG_TRIVIAL(info) << "[+] Client disconnected" << std::endl;
 }
 
 int64_t Connection::sendMessage(int32_t socket, const std::string& message, int32_t flags) {
@@ -254,10 +257,10 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 				storeFiles(std::make_pair(client_socket_listen, client_socket_communicate),
 				           filename, file_size, file_hash);
 			} catch (const std::invalid_argument& err) {
-				std::cout << "[-] Error: Invalid argument: " << err.what() << '.' << std::endl;
+				BOOST_LOG_TRIVIAL(error) << "[-] Invalid argument: " << err.what() << std::endl;
 				return false;
 			} catch (const std::out_of_range& err) {
-				std::cout << "[-] Error: Out of range: " << err.what() << '.' << std::endl;
+				BOOST_LOG_TRIVIAL(error) << "[-] Out of range: " << err.what() << std::endl;
 				return false;
 			}
 		}
@@ -309,7 +312,6 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	std::string message;
 	std::vector<std::pair<int32_t, int32_t>> sockets = findSocket(filename);
 	const std::string& command_error = commands[3];
-	const std::string& command_exist = commands[4];
 
 	if (isFilenameModify(filename)) {
 		real_filename = removeIndex(filename);
@@ -318,8 +320,7 @@ int64_t Connection::sendFile(int32_t socket, const std::string& filename) {
 	}
 
 	if (isFilenameChange(socket, filename)) {
-		sendMessage(socket, command_exist, MSG_CONFIRM | MSG_NOSIGNAL);
-		return 0;
+		return -2;
 	}
 
 	try {
@@ -483,7 +484,7 @@ void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string&
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	storage.insert(std::pair(pair, data));
-	std::cout << "[+] Success: Stored the file: " << filename << '.' << std::endl;
+	BOOST_LOG_TRIVIAL(info) << "[+] Stored the file: " << filename << std::endl;
 }
 
 void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
