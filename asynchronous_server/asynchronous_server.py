@@ -56,7 +56,9 @@ class Connection:
                 client_socket_listen.setblocking(False)
                 client_socket_communicate.setblocking(False)
 
-                synchronization_result = await self.synchronization(client_socket_listen, client_socket_communicate)
+                synchronization_result = await self.loop.create_task(
+                    self.synchronization(client_socket_listen, client_socket_communicate)
+                )
 
                 if synchronization_result:
                     logger.info(
@@ -108,7 +110,8 @@ class Connection:
                 elif command == commands[2]:
                     self.remove_clients((client_socket_listen, client_socket_communicate))
                     self.close_client_connections(client_socket_listen, client_socket_communicate)
-                    logger.info('Client disconnected')
+                    logger.info(f'Client disconnected: {client_socket_listen.getpeername()},'
+                                f' {client_socket_communicate.getpeername()}')
                     break
         except OSError as e:
             logger.error(e)
@@ -118,7 +121,7 @@ class Connection:
         command_error = commands[3]
 
         try:
-            message = await self.receive_message(client_socket_listen, BUFFER_SIZE)
+            message = await self.receive_message(client_socket_communicate, BUFFER_SIZE)
             if not message or message == command_error:
                 return False
 
@@ -149,7 +152,7 @@ class Connection:
                 if message_size <= 0:
                     break
 
-                message = await self.receive_message(client_socket_listen, message_size)
+                message = await self.receive_message(client_socket_communicate, message_size)
                 if not message or message == command_error:
                     return False
 
@@ -309,7 +312,6 @@ class Connection:
         hash_count = defaultdict(int)
 
         try:
-            hash_count = defaultdict(int)
             for pair, file_infos in self.storage.items():
                 for file_info in file_infos:
                     hash_count[file_info.hash] += 1

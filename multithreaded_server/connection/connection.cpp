@@ -226,7 +226,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 	std::string message;
 	const std::string& command_error = commands[3];
 
-	bytes = receiveMessage(client_socket_listen, message, MSG_NOSIGNAL);
+	bytes = receiveMessage(client_socket_communicate, message, MSG_NOSIGNAL);
 	if (bytes < 0 || message == command_error) {
 		return false;
 	}
@@ -268,7 +268,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			break;
 		}
 
-		bytes = receiveMessage(client_socket_listen, message, MSG_NOSIGNAL);
+		bytes = receiveMessage(client_socket_communicate, message, MSG_NOSIGNAL);
 		if (bytes < 0 || message == command_error) {
 			return false;
 		}
