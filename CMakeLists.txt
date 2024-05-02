@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 
 add_subdirectory(multithreaded_server)
 add_subdirectory(client)
+add_subdirectory(switch)
 
 find_package(Boost REQUIRED COMPONENTS log)
 target_link_libraries(multithreaded_server PRIVATE Boost::log)

@@ -17,9 +17,14 @@
 #include <sys/socket.h>
 #include <dirent.h>
 #include <arpa/inet.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/ether.h>
 
 #include <boost/log/trivial.hpp>
 #include <boost/crc.hpp>
+
+#include <pcap.h>
 
 #define BUFFER_SIZE 1024
 
