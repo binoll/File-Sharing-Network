@@ -1,6 +1,6 @@
 import asyncio
 import socket
-from typing import Tuple, List, Dict, Optional, Any, Coroutine
+from typing import Tuple, List, Dict, Optional
 
 BUFFER_SIZE = 1024
 BACKLOG = 100
@@ -37,8 +37,7 @@ class Connection:
         print(f'[*] Server is listening on port for communicate: {socket_communicate.getsockname()[1]}.')
         print(f'[*] Server is listening on port for listening: {socket_listen.getsockname()[1]}.')
 
-        await self.accept_connections(socket_listen, socket_communicate)
-        await self.handle_clients()
+        await asyncio.gather(self.handle_clients(), self.accept_connections(socket_listen, socket_communicate))
 
     async def accept_connections(self, socket_listen, socket_communicate):
         while True:
@@ -52,20 +51,23 @@ class Connection:
             print(f'[+] Success: Client connected: {client_addr_listen[0]}:{client_addr_listen[1]},'
                   f' {client_addr_communicate[0]}:{client_addr_communicate[1]}.')
 
-            async with self.synchronization_lock:
-                synchronization = self.synchronization(client_socket_listen, client_socket_communicate)
+            synchronization = await self.synchronization(client_socket_listen, client_socket_communicate)
 
-                if synchronization:
-                    self.sockets.append((client_socket_listen, client_socket_communicate))
-                else:
-                    print('[-] Error: Client disconnected. The storage could not be synchronized.')
-                    client_socket_listen.close()
-                    client_socket_communicate.close()
+            if synchronization:
+                self.sockets.append((client_socket_listen, client_socket_communicate))
+            else:
+                print('[-] Error: Client disconnected. The storage could not be synchronized.')
+                client_socket_listen.close()
+                client_socket_communicate.close()
 
     async def handle_clients(self) -> None:
         while True:
+            if len(self.sockets) == 0:
+                await asyncio.sleep(0.1)
+                continue
+
             for client_socket_listen, client_socket_communicate in self.sockets:
-                command = self.receive_message(client_socket_listen, BUFFER_SIZE)
+                command = await self.receive_message(client_socket_listen, BUFFER_SIZE)
 
                 if not command:
                     continue
@@ -81,11 +83,11 @@ class Connection:
                     client_socket_communicate.close()
                     print('[+] Success: Client disconnected.')
 
-    def synchronization(self, client_socket_listen: socket.socket,
-                        client_socket_communicate: socket.socket) -> bool:
+    async def synchronization(self, client_socket_listen: socket.socket,
+                              client_socket_communicate: socket.socket) -> bool:
         command_error = commands[3]
 
-        message = self.receive_message(client_socket_listen, BUFFER_SIZE)
+        message = await self.receive_message(client_socket_listen, BUFFER_SIZE)
         if not message or message == command_error:
             return False
 
@@ -113,7 +115,7 @@ class Connection:
             if message_size <= 0:
                 break
 
-            message = self.receive_message(client_socket_listen, message_size)
+            message = await self.receive_message(client_socket_listen, message_size)
             if not message or message == command_error:
                 return False
 
@@ -121,28 +123,30 @@ class Connection:
         return True
 
     @staticmethod
-    def send_message(sock: socket.socket, message: str) -> Coroutine[Any, Any, None]:
+    async def send_message(sock: socket.socket, message: str) -> None:
         buffer = bytearray(message.encode())
-        return Connection.send_bytes(sock, buffer)
+        await Connection.send_bytes(sock, buffer)
 
     @staticmethod
-    def receive_message(sock: socket.socket, size: int) -> Optional[str]:
-        buffer = Connection.receive_bytes(sock, size)
+    async def receive_message(sock: socket.socket, size: int) -> Optional[str]:
+        buffer = await Connection.receive_bytes(sock, size)
         if not buffer:
             return None
         try:
-            str(buffer)
-        except ValueError:
+            buffer_str = buffer.decode()
+        except UnicodeDecodeError:
             return None
-        return str(buffer)
+        return buffer_str
 
     @staticmethod
-    def send_bytes(sock: socket.socket, buffer: bytes) -> Coroutine[Any, Any, None]:
-        return asyncio.get_event_loop().sock_sendall(sock, buffer)
+    async def send_bytes(sock: socket.socket, buffer: bytes) -> None:
+        loop = asyncio.get_event_loop()
+        return await loop.sock_sendall(sock, buffer)
 
     @staticmethod
-    def receive_bytes(sock: socket.socket, size: int) -> Coroutine[Any, Any, bytes] | None:
-        buffer = asyncio.get_event_loop().sock_recv(sock, size)
+    async def receive_bytes(sock: socket.socket, size: int) -> bytes | None:
+        loop = asyncio.get_event_loop()
+        buffer = await loop.sock_recv(sock, size)
         if not buffer:
             return None
         return buffer
@@ -166,8 +170,7 @@ class Connection:
             return -1
 
         message = f'{message_size}: {list_str}'
-        bytes_sent = await self.send_message(sock, message)
-        return bytes_sent
+        await self.send_message(sock, message)
 
     async def send_file(self, sock: socket.socket, filename: str) -> int | None:
         command_error = commands[3]
@@ -187,9 +190,7 @@ class Connection:
             print('[-] Error:', e)
             return -1
 
-        bytes_sent = await self.send_message(sock, message)
-        if bytes_sent is None:
-            return -1
+        await self.send_message(sock, message)
 
         sockets = self.find_socket(filename)
         sockets = [(pair[0], pair[1]) for pair in sockets if pair[0] != sock and pair[1] != sock]
@@ -206,12 +207,10 @@ class Connection:
                 if not self.check_connection(client_socket_communicate):
                     return -1
 
-                bytes_sent = self.send_message(client_socket_communicate, message)
-                if bytes_sent is None:
-                    continue
+                await self.send_message(client_socket_communicate, message)
 
                 try:
-                    buffer = self.receive_bytes(client_socket_communicate, chunk_size)
+                    buffer = await self.receive_bytes(client_socket_communicate, chunk_size)
                 except sock.timeout:
                     continue
                 except Exception as e:
@@ -228,7 +227,7 @@ class Connection:
                 except ValueError:
                     pass
 
-                bytes_sent = await self.send_bytes(sock, buffer)
+                bytes_sent = self.send_bytes(sock, buffer)
                 if bytes_sent is None:
                     continue
 
