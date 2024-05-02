@@ -28,60 +28,73 @@ class Connection:
     async def wait_connection(self):
         socket_communicate = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socket_communicate.bind(self.addr_communicate)
-        socket_communicate.listen(BACKLOG)
+        socket_communicate.listen(5)  # backlog установлен на 5
 
         socket_listen = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         socket_listen.bind(self.addr_listen)
-        socket_listen.listen(BACKLOG)
+        socket_listen.listen(5)  # backlog установлен на 5
 
         print(f'[*] Server is listening on port for communicate: {socket_communicate.getsockname()[1]}.')
         print(f'[*] Server is listening on port for listening: {socket_listen.getsockname()[1]}.')
 
-        await asyncio.gather(self.handle_clients(), self.accept_connections(socket_listen, socket_communicate))
+        await asyncio.gather(
+            self.handle_clients(),
+            self.accept_connections(socket_listen, socket_communicate)
+        )
 
     async def accept_connections(self, socket_listen, socket_communicate):
         while True:
-            client_socket_communicate, client_addr_communicate = await asyncio.get_event_loop().sock_accept(
-                socket_communicate
+            client_socket_communicate, _ = await asyncio.get_event_loop().sock_accept(socket_communicate)
+            client_socket_listen, _ = await asyncio.get_event_loop().sock_accept(socket_listen)
+
+            print(f'[+] Success: Client connected: {client_socket_listen.getpeername()}, '
+                  f'{client_socket_communicate.getpeername()}')
+
+            synchronization_task = asyncio.create_task(
+                self.synchronization(client_socket_listen, client_socket_communicate)
             )
-            client_socket_listen, client_addr_listen = await asyncio.get_event_loop().sock_accept(
-                socket_listen
-            )
 
-            print(f'[+] Success: Client connected: {client_addr_listen[0]}:{client_addr_listen[1]},'
-                  f' {client_addr_communicate[0]}:{client_addr_communicate[1]}.')
+            synchronization_result = await synchronization_task
 
-            synchronization = await self.synchronization(client_socket_listen, client_socket_communicate)
-
-            if synchronization:
+            if synchronization_result:
                 self.sockets.append((client_socket_listen, client_socket_communicate))
             else:
                 print('[-] Error: Client disconnected. The storage could not be synchronized.')
-                client_socket_listen.close()
-                client_socket_communicate.close()
+                await Connection.close_client_connections(client_socket_listen, client_socket_communicate)
 
-    async def handle_clients(self) -> None:
+    @staticmethod
+    async def close_client_connections(client_socket_listen, client_socket_communicate):
+        try:
+            client_socket_listen.close()
+            client_socket_communicate.close()
+        except Exception as e:
+            print(f'[-] Error occurred while closing client connections: {e}')
+
+    async def handle_clients(self):
         while True:
-            if len(self.sockets) == 0:
-                await asyncio.sleep(0.1)
+            if not self.sockets:
+                await asyncio.sleep(0)
                 continue
 
-            for client_socket_listen, client_socket_communicate in self.sockets:
-                command = await self.receive_message(client_socket_listen, BUFFER_SIZE)
+            tasks = [self.handle_client(client_socket_listen, client_socket_communicate) for
+                     client_socket_listen, client_socket_communicate in self.sockets]
+            await asyncio.gather(*tasks)
 
-                if not command:
-                    continue
+    async def handle_client(self, client_socket_listen, client_socket_communicate):
+        command = await self.receive_message(client_socket_listen, BUFFER_SIZE)
 
-                if command == commands[0]:
-                    await self.send_list(client_socket_listen)
-                elif command.startswith(commands[1]):
-                    filename = command.split(':')[1]
-                    await self.send_file(client_socket_listen, filename)
-                elif command == commands[2]:
-                    self.remove_clients((client_socket_listen, client_socket_communicate))
-                    client_socket_listen.close()
-                    client_socket_communicate.close()
-                    print('[+] Success: Client disconnected.')
+        if not command:
+            return
+
+        if command == commands[0]:
+            await self.send_list(client_socket_listen)
+        elif command.startswith(commands[1]):
+            filename = command.split(':')[1]
+            await self.send_file(client_socket_listen, filename)
+        elif command == commands[2]:
+            self.remove_clients((client_socket_listen, client_socket_communicate))
+            await self.close_client_connections(client_socket_listen, client_socket_communicate)
+            print('[+] Success: Client disconnected.')
 
     async def synchronization(self, client_socket_listen: socket.socket,
                               client_socket_communicate: socket.socket) -> bool:
