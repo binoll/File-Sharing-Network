@@ -273,16 +273,21 @@ class Connection:
 
     def get_list_files(self) -> List[str]:
         try:
-            filename_counts = {}
+            filename_counts = defaultdict(int)
             unique_filenames = []
+            duplicate_filenames = []
 
             for values in self.storage.values():
                 for value in values:
-                    filename_counts[value.filename] = filename_counts.get(value.filename, 0) + 1
+                    filename_counts[value.filename] += 1
 
             for filename, count in filename_counts.items():
                 if count == 1:
                     unique_filenames.append(filename)
+                else:
+                    duplicate_filenames.append(filename)
+
+            unique_filenames.extend(duplicate_filenames)
 
             return unique_filenames
         except Exception as e:
@@ -304,26 +309,32 @@ class Connection:
         hash_count = defaultdict(int)
 
         try:
+            hash_count = defaultdict(int)
             for pair, file_infos in self.storage.items():
                 for file_info in file_infos:
                     hash_count[file_info.hash] += 1
 
-            for pair, file_infos in self.storage.items():
-                for file_info in file_infos:
-                    file_occurrences = hash_count[file_info.hash]
+            for first_pair, first_file_infos in self.storage.items():
+                for second_pair, second_file_infos in self.storage.items():
+                    if first_pair == second_pair:
+                        continue
 
-                    if file_occurrences > 1:
-                        file_info.filename += f'({file_occurrences - 1})'
-                        file_info.is_filename_modify = True
-
-            for pair, file_infos in self.storage.items():
-                for file_info in file_infos:
-                    for other_pair, other_file_infos in self.storage.items():
-                        for other_file_info in other_file_infos:
-                            if (file_info.hash == other_file_info.hash and
-                                    file_info.filename != other_file_info.filename):
-                                other_file_info.filename = file_info.filename
-                                other_file_info.is_filename_changed = True
+                    for first_file_info in first_file_infos:
+                        for second_file_info in second_file_infos:
+                            if (first_file_info.hash != second_file_info.hash and
+                                    first_file_info.filename == second_file_info.filename):
+                                file_occurrences = hash_count[first_file_info.hash]
+                                if file_occurrences > 1:
+                                    first_file_info.filename += f'({file_occurrences - 1})'
+                                    second_file_info.filename += f'({file_occurrences})'
+                                    first_file_info.is_filename_modify = True
+                                    second_file_info.is_filename_modify = True
+                                    hash_count[first_file_info.hash] -= 1
+                                    hash_count[second_file_info.hash] -= 1
+                            elif (first_file_info.hash == second_file_info.hash and
+                                  first_file_info.filename != second_file_info.filename):
+                                second_file_info.filename = first_file_info.filename
+                                second_file_info.is_filename_changed = True
         except Exception as e:
             logger.error(e)
 
