@@ -1,3 +1,4 @@
+# Copyright 2024 binoll
 import asyncio
 import socket
 from typing import Tuple, List, Optional
