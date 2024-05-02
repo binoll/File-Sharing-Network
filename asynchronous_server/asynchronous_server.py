@@ -1,6 +1,7 @@
 import asyncio
 import socket
-from typing import Tuple, List, Dict, Optional
+from typing import Tuple, List, Optional
+from collections import defaultdict
 
 BUFFER_SIZE = 1024
 BACKLOG = 100
@@ -19,7 +20,7 @@ class FileInfo:
 
 class Connection:
     def __init__(self):
-        self.storage: Dict[Tuple[socket, socket], FileInfo] = {}
+        self.storage: defaultdict[Tuple[socket.socket, socket.socket], List[FileInfo]] = defaultdict(list)
         self.addr_listen: Tuple[str, int] = ('0.0.0.0', 0)
         self.addr_communicate: Tuple[str, int] = ('0.0.0.0', 0)
         self.loop = asyncio.get_event_loop()
@@ -57,7 +58,7 @@ class Connection:
             synchronization_result = await self.synchronization(client_socket_listen, client_socket_communicate)
 
             if synchronization_result:
-                await self.loop.create_task(self.handle_client(client_socket_listen, client_socket_communicate))
+                self.loop.create_task(self.handle_client(client_socket_listen, client_socket_communicate))
             else:
                 print('[-] Error: Client disconnected. The storage could not be synchronized.')
                 self.close_client_connections(client_socket_listen, client_socket_communicate)
@@ -127,14 +128,12 @@ class Connection:
         self.update_storage()
         return True
 
-    @staticmethod
-    async def send_message(sock: socket.socket, message: str) -> None:
-        buffer = bytearray(message.encode())
-        await Connection.send_bytes(sock, buffer)
+    async def send_message(self, sock: socket.socket, message: str) -> None:
+        buffer = bytes(message.encode())
+        await Connection.send_bytes(self, sock, buffer)
 
-    @staticmethod
-    async def receive_message(sock: socket.socket, size: int) -> Optional[str]:
-        buffer = await Connection.receive_bytes(sock, size)
+    async def receive_message(self, sock: socket.socket, size: int) -> Optional[str]:
+        buffer = await Connection.receive_bytes(self, sock, size)
         if not buffer:
             return None
         try:
@@ -143,15 +142,11 @@ class Connection:
             return None
         return buffer_str
 
-    @staticmethod
-    async def send_bytes(sock: socket.socket, buffer: bytes) -> None:
-        loop = asyncio.get_event_loop()
-        return await loop.sock_sendall(sock, buffer)
+    async def send_bytes(self, sock: socket.socket, buffer: bytes) -> None:
+        return await self.loop.sock_sendall(sock, buffer)
 
-    @staticmethod
-    async def receive_bytes(sock: socket.socket, size: int) -> bytes | None:
-        loop = asyncio.get_event_loop()
-        buffer = await loop.sock_recv(sock, size)
+    async def receive_bytes(self, sock: socket.socket, size: int) -> bytes | None:
+        buffer = await self.loop.sock_recv(sock, size)
         if not buffer:
             return None
         return buffer
@@ -174,7 +169,7 @@ class Connection:
             print('[-] Error:', e)
             return -1
 
-        message = f'{message_size}: {list_str}'
+        message = f'{message_size}:{list_str}'
         await self.send_message(sock, message)
 
     async def send_file(self, sock: socket.socket, filename: str) -> int | None:
@@ -241,67 +236,69 @@ class Connection:
         return total_bytes
 
     def find_socket(self, filename: str) -> List[Tuple[socket.socket, socket.socket]]:
-        result = []
-        for key, value in self.storage.items():
-            if value.filename == filename:
-                result.append(key)
-        return result
+        return [(key[0], key[1]) for key, values in self.storage.items() for value in values if
+                value.filename == filename]
 
     def get_list_files(self) -> List[str]:
         filename_counts = {}
         unique_filenames = []
-        duplicate_filenames = []
-        for value in self.storage.values():
-            filename_counts[value.filename] = filename_counts.get(value.filename, 0) + 1
+
+        for values in self.storage.values():
+            for value in values:
+                filename_counts[value.filename] = filename_counts.get(value.filename, 0) + 1
 
         for filename, count in filename_counts.items():
             if count == 1:
                 unique_filenames.append(filename)
-            else:
-                duplicate_filenames.append(filename)
 
-        unique_filenames.extend(duplicate_filenames)
         return unique_filenames
 
     def get_size(self, filename: str) -> int:
-        for value in self.storage.values():
-            if value.filename == filename:
-                return value.size
+        for pair, file_infos in self.storage.items():
+            for file_info in file_infos:
+                if file_info.filename == filename:
+                    return file_info.size
         return -1
 
     def update_storage(self):
-        hash_count = {}
-        for value in self.storage.values():
-            hash_count[value.hash] = hash_count.get(value.hash, 0) + 1
+        hash_count = defaultdict(int)
+        for pair, file_infos in self.storage.items():
+            for file_info in file_infos:
+                hash_count[file_info.hash] += 1
 
-        for first_key, first_value in self.storage.items():
-            for second_key, second_value in self.storage.items():
-                file_occurrences = hash_count[first_value.hash]
-                if first_value.hash != second_value.hash and first_value.filename == second_value.filename:
-                    if file_occurrences > 1:
-                        first_value.filename += '(' + str(file_occurrences - 1) + ')'
-                        second_value.filename += '(' + str(file_occurrences) + ')'
-                        first_value.is_filename_modify = True
-                        second_value.is_filename_modify = True
-                        hash_count[first_value.hash] -= 1
-                        hash_count[second_value.hash] -= 1
-                elif first_value.hash == second_value.hash and first_value.filename != second_value.filename:
-                    second_value.filename = first_value.filename
-                    second_value.is_filename_changed = True
+        for pair, file_infos in self.storage.items():
+            for file_info in file_infos:
+                file_occurrences = hash_count[file_info.hash]
+                if file_occurrences > 1:
+                    file_info.filename += f'({file_occurrences - 1})'
+                    file_info.is_filename_modify = True
+
+        for pair, file_infos in self.storage.items():
+            for file_info in file_infos:
+                for other_pair, other_file_infos in self.storage.items():
+                    for other_file_info in other_file_infos:
+                        if file_info.hash == other_file_info.hash and file_info.filename != other_file_info.filename:
+                            other_file_info.filename = file_info.filename
+                            other_file_info.is_filename_changed = True
 
     def store_files(self, pair: Tuple[socket.socket, socket.socket], filename: str, size: int, hash_val: str):
         data = FileInfo(size, hash_val, filename)
-        self.storage[pair] = data
+        self.storage[pair].append(data)
         print("[+] Success: Stored the file:", filename)
 
     def remove_clients(self, pair: Tuple[socket.socket, socket.socket]):
-        for key, value in list(self.storage.items()):
+        keys_to_remove = []
+        for key, values in self.storage.items():
             if key == pair:
-                filename = self.remove_index(value.filename)
-                for entry_key, entry_value in self.storage.items():
+                keys_to_remove.append(key)
+                filename = self.remove_index(values[0].filename)  # Предполагается, что значение всегда существует
+                for entry_value in self.storage[key]:
                     if entry_value.filename.startswith(filename):
                         entry_value.filename = self.remove_index(entry_value.filename)
-                del self.storage[key]
+
+        for key in keys_to_remove:
+            del self.storage[key]
+
         self.update_storage()
 
     @staticmethod
@@ -312,15 +309,18 @@ class Connection:
         return filename
 
     def is_filename_modify(self, filename: str) -> bool:
-        for value in self.storage.values():
-            if value.filename == filename:
-                return value.is_filename_modify
+        for values in self.storage.values():
+            for value in values:
+                if value.filename == filename:
+                    return value.is_filename_modify
         return False
 
     def is_filename_change(self, sock: socket.socket, filename: str) -> bool:
-        for key, value in self.storage.items():
-            if value.filename == filename and (key[0] == sock or key[1] == sock):
-                return value.is_filename_changed
+        for key, values in self.storage.items():
+            if key[0] == sock or key[1] == sock:
+                for value in values:
+                    if value.filename == filename:
+                        return value.is_filename_changed
         return False
 
     @staticmethod
@@ -332,10 +332,11 @@ class Connection:
             return False
 
 
-def main():
+async def main():
     connection = Connection()
-    asyncio.run(connection.wait_connection())
+    await connection.wait_connection()
 
 
 if __name__ == "__main__":
-    main()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
