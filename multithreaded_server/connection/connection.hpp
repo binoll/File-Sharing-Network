@@ -18,7 +18,7 @@ class Connection {
 
 	static bool checkConnection(int32_t);
 
-	void handleClients(int32_t, int32_t);
+	void processingClients(int32_t client_socket_listen, int32_t client_socket_communicate);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 

@@ -75,7 +75,7 @@ void Connection::waitConnection() {
 		BOOST_LOG_TRIVIAL(info) << "[+] Client connected: " << inet_ntoa(client_addr_listen.sin_addr) << ':'
 					<< client_addr_listen.sin_port << ' ' << inet_ntoa(client_addr_communicate.sin_addr) << ':'
 					<< client_addr_communicate.sin_port << std::endl;
-		std::thread thread(&Connection::handleClients, this, client_socket_listen, client_socket_communicate);
+		std::thread thread(&Connection::processingClients, this, client_socket_listen, client_socket_communicate);
 		thread.detach();
 	}
 }
@@ -118,7 +118,7 @@ bool Connection::checkConnection(int32_t socket) {
 	return true;
 }
 
-void Connection::handleClients(int32_t client_socket_listen, int32_t client_socket_communicate) {
+void Connection::processingClients(int32_t client_socket_listen, int32_t client_socket_communicate) {
 	int64_t bytes;
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1] + ':';
@@ -127,7 +127,8 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
 		BOOST_LOG_TRIVIAL(error) << "[-] The client cannot connect. The storage could not be synchronized" << std::endl;
-		removeClients(std::pair(client_socket_listen, client_socket_communicate));
+		removeClients({client_socket_listen, client_socket_communicate});
+		updateStorage();
 		close(client_socket_listen);
 		close(client_socket_communicate);
 		return;
@@ -162,7 +163,8 @@ void Connection::handleClients(int32_t client_socket_listen, int32_t client_sock
 			break;
 		}
 	}
-	removeClients(std::pair(client_socket_listen, client_socket_communicate));
+	removeClients({client_socket_listen, client_socket_communicate});
+	updateStorage();
 	close(client_socket_listen);
 	close(client_socket_communicate);
 	BOOST_LOG_TRIVIAL(info) << "[+] Client disconnected" << std::endl;
@@ -276,7 +278,6 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 			return false;
 		}
 	}
-	updateStorage();
 	return true;
 }
 
@@ -286,14 +287,16 @@ int64_t Connection::sendList(int32_t socket) {
 	std::string list;
 	std::vector<std::string> files = getListFiles();
 
-	list = std::accumulate(files.begin(), files.end(), std::string(),
-	                       [](const std::string& a, const std::string& b) {
-		                       return a + b + ' ';
-	                       });
+	list = std::accumulate(
+			files.begin(), files.end(), std::string(),
+			[](const std::string& a, const std::string& b) {
+				return a + b + ' ';
+			}
+	);
 
 	try {
 		message_size = std::to_string(list.size()) + ':';
-	} catch (const std::exception& err) {
+	} catch (const std::exception&) {
 		return -1;
 	}
 
@@ -501,7 +504,6 @@ void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 		}
 	}
 	storage.erase(range.first, range.second);
-	updateStorage();
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {
