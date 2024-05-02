@@ -47,7 +47,7 @@ To start the multithreaded server:
 To start the asynchronous server:
 
 ```bash
-python3 ../asynchronous_server/asynchronous_server.py
+python ../asynchronous_server/asynchronous_server.py
 ```
 
 To start the client:
