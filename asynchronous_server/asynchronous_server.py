@@ -39,9 +39,7 @@ class Connection:
         print(f'[*] Server is listening on port for communicate: {socket_communicate.getsockname()[1]}.')
         print(f'[*] Server is listening on port for listening: {socket_listen.getsockname()[1]}.')
 
-        await asyncio.gather(
-            self.accept_connections(socket_listen, socket_communicate)
-        )
+        await asyncio.create_task(self.accept_connections(socket_listen, socket_communicate))
 
     async def accept_connections(self, socket_listen, socket_communicate):
         while True:
