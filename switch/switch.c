@@ -25,20 +25,22 @@ struct tcphdr* check_tcp_segment(const u_char* packet) {
 
 void modify_tcp_segment(struct tcphdr* tcp_header) {
 	if (tcp_header != NULL) {
-		tcp_header->urg_ptr = htons(tcp_header->urg_ptr + 1);
+		tcp_header->urg = 1;
+		tcp_header->urg_ptr = htons(33333);
 	}
 }
 
+
 void tcp_segment_before(struct tcphdr* tcp_header, const char* interface) {
 	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%hu\" on interface %s\n", htons(tcp_header->urg_ptr),
+		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%hu\" on interface %s\n", ntohs(tcp_header->urg_ptr),
 		        interface);
 	}
 }
 
 void tcp_segment_after(struct tcphdr* tcp_header, const char* interface) {
 	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%hu\" on interface %s\n", htons(tcp_header->urg_ptr),
+		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%hu\" on interface %s\n", ntohs(tcp_header->urg_ptr),
 		        interface);
 	}
 }
@@ -77,7 +79,18 @@ int main(int argc, char* argv[]) {
 		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
 		tcp_segment_before(tcp_header, interface);
 		modify_tcp_segment(tcp_header);
-		tcp_segment_after(tcp_header, interface);
+
+		if (pcap_sendpacket(handle_before, packet, header.len) != 0) {
+			fprintf(stdout, "Error sending packet: %s\n", pcap_geterr(handle_before));
+			pcap_close(handle_before);
+			return -1;
+		}
+
+		packet = pcap_next(handle_before, &header);
+		if (packet != NULL) {
+			struct tcphdr* modified_tcp_header = check_tcp_segment(packet);
+			tcp_segment_after(modified_tcp_header, interface);
+		}
 		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
 	pcap_close(handle_before);

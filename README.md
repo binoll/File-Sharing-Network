@@ -55,3 +55,8 @@ To start the client:
 ```bash
 ./build/client/client
 ```
+
+To start the switch
+```bash
+./build/switch/switch
+```
