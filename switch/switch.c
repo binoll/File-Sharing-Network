@@ -33,12 +33,14 @@ void tcp_segment_before(const u_char* packet, const char* interface) {
 	struct tcphdr* tcp_header = check_tcp_segment(packet);
 	if (tcp_header != NULL) {
 		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%i\" on "
-		                "interface %s", tcp_header->urg, interface);
+		                "interface %s\n", tcp_header->urg, interface);
 	}
 }
 
 void tcp_segment_after(pcap_t* handle, const char* interface) {
-	const u_char* packet = pcap_next(handle, NULL);
+	struct pcap_pkthdr header;
+
+	const u_char* packet = pcap_next(handle, &header);
 	if (packet == NULL) {
 		return;
 	}
@@ -46,7 +48,7 @@ void tcp_segment_after(pcap_t* handle, const char* interface) {
 	struct tcphdr* tcp_header = check_tcp_segment(packet);
 	if (tcp_header != NULL) {
 		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%i\" on "
-		                "interface %s", tcp_header->urg, interface);
+		                "interface %s\n", tcp_header->urg, interface);
 	}
 }
 
@@ -55,8 +57,10 @@ int main(int argc, char* argv[]) {
 	char buffer_after[PCAP_ERRBUF_SIZE];
 	pcap_t* handle_before = NULL;
 	pcap_t* handle_after = NULL;
+	const u_char* packet = NULL;
 	char interface_before_modify[BUFFER_SIZE];
 	char interface_after_modify[BUFFER_SIZE];
+	struct pcap_pkthdr header;
 
 	if (argc != 3) {
 		fprintf(stdout, "Usage: %s (interface_before_modify) (interface_after_modify)\n", argv[0]);
@@ -68,27 +72,29 @@ int main(int argc, char* argv[]) {
 
 	handle_before = pcap_open_live(interface_before_modify, BUFSIZ, 1, 1000, buffer_before);
 	if (handle_before == NULL) {
-		fprintf(stdout, "Could not open device: %s", interface_before_modify);
+		fprintf(stdout, "\nCould not open device: %s", interface_before_modify);
 		return -1;
 	}
 
 	handle_after = pcap_open_live(interface_after_modify, BUFSIZ, 1, 1000, buffer_after);
 	if (handle_after == NULL) {
-		fprintf(stdout, "Could not open device: %s", interface_after_modify);
+		fprintf(stdout, "\nCould not open device: %s", interface_after_modify);
+		pcap_close(handle_before);
 		return -1;
 	}
 
 	for (unsigned long long i = 0;; ++i) {
-		const u_char* packet = pcap_next(handle_before, NULL);
-		if (packet == NULL) {
+		packet = pcap_next(handle_before, &header);
+		if (packet == NULL || check_tcp_segment(packet) == NULL) {
 			continue;
 		}
-		fprintf(stdout, "+-------------Start of TCP segment %llu-------------+", i);
+		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
 		tcp_segment_before(packet, interface_before_modify);
 		modify_tcp_segment(packet);
 		tcp_segment_after(handle_after, interface_after_modify);
-		fprintf(stdout, "+-------------End of TCP segment %llu-------------+", i);
+		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
+
 	pcap_close(handle_before);
 	pcap_close(handle_after);
 	return 0;
