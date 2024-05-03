@@ -97,9 +97,9 @@ int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	pcap_t* handle = NULL;
 	const u_char* packet = NULL;
-	char* interface_before_modify = NULL;
-	char* interface_modify = NULL;
-	char* interface_after_modify = NULL;
+	char interface_before_modify[BUFFER_SIZE];
+	char interface_modify[BUFFER_SIZE];
+	char interface_after_modify[BUFFER_SIZE];
 	struct pcap_pkthdr* header = NULL;
 	pthread_t* thread_before_modify = NULL;
 	pthread_t* thread_after_modify = NULL;
