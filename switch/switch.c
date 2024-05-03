@@ -100,9 +100,8 @@ int main(int argc, char* argv[]) {
 	char interface_before_modify[BUFFER_SIZE];
 	char interface_modify[BUFFER_SIZE];
 	char interface_after_modify[BUFFER_SIZE];
-	struct pcap_pkthdr* header = NULL;
-	pthread_t* thread_before_modify = NULL;
-	pthread_t* thread_after_modify = NULL;
+	pthread_t thread_before_modify;
+	pthread_t thread_after_modify;
 
 	if (argc != 4) {
 		fprintf(stdout, "Usage: %s (interface_before_modify) (interface_modify) (interface_after_modify)\n", argv[0]);
@@ -119,19 +118,19 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	if (pthread_create(thread_before_modify, NULL, tcp_segment_before, interface_before_modify) != 0) {
+	if (pthread_create(&thread_before_modify, NULL, tcp_segment_before, interface_before_modify) != 0) {
 		fprintf(stdout, "Error creating thread_before_modify\n");
 		return -1;
 	}
-	if (pthread_create(thread_after_modify, NULL, tcp_segment_after, interface_after_modify) != 0) {
+	if (pthread_create(&thread_after_modify, NULL, tcp_segment_after, interface_after_modify) != 0) {
 		fprintf(stdout, "Error creating thread_after_modify\n");
 		return -1;
 	}
-	pthread_detach(*thread_before_modify);
-	pthread_detach(*thread_after_modify);
+	pthread_detach(thread_before_modify);
+	pthread_detach(thread_after_modify);
 
 	while (true) {
-		packet = pcap_next(handle, header);
+		packet = pcap_next(handle, NULL);
 
 		if (packet == NULL) {
 			continue;
