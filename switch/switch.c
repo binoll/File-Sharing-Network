@@ -2,10 +2,8 @@
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <netinet/ether.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 int BUFFER_SIZE = 256;
 
@@ -40,7 +38,7 @@ void tcp_segment_before(const u_char* packet, const char* interface) {
 }
 
 void tcp_segment_after(pcap_t* handle, const char* interface) {
-	u_char* packet = pcap_next(handle, NULL);
+	const u_char* packet = pcap_next(handle, NULL);
 	if (packet == NULL) {
 		return;
 	}
@@ -56,7 +54,6 @@ int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	pcap_t* handle_before = NULL;
 	pcap_t* handle_after = NULL;
-	u_char* packet = NULL;
 	char interface_before_modify[BUFFER_SIZE];
 	char interface_after_modify[BUFFER_SIZE];
 
@@ -81,8 +78,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	for (unsigned long long i = 0;; ++i) {
-		packet = pcap_next(handle_before, NULL);
-
+		const u_char* packet = pcap_next(handle_before, NULL);
 		if (packet == NULL) {
 			continue;
 		}
