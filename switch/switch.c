@@ -51,7 +51,8 @@ void tcp_segment_after(pcap_t* handle, const char* interface) {
 }
 
 int main(int argc, char* argv[]) {
-	char buffer[PCAP_ERRBUF_SIZE];
+	char buffer_before[PCAP_ERRBUF_SIZE];
+	char buffer_after[PCAP_ERRBUF_SIZE];
 	pcap_t* handle_before = NULL;
 	pcap_t* handle_after = NULL;
 	char interface_before_modify[BUFFER_SIZE];
@@ -65,13 +66,13 @@ int main(int argc, char* argv[]) {
 	strcpy(interface_before_modify, argv[1]);
 	strcpy(interface_after_modify, argv[2]);
 
-	handle_before = pcap_open_live(interface_before_modify, BUFSIZ, 1, 1000, buffer);
+	handle_before = pcap_open_live(interface_before_modify, BUFSIZ, 1, 1000, buffer_before);
 	if (handle_before == NULL) {
 		fprintf(stdout, "Could not open device: %s", interface_before_modify);
 		return -1;
 	}
 
-	handle_after = pcap_open_live(interface_after_modify, BUFSIZ, 1, 1000, buffer);
+	handle_after = pcap_open_live(interface_after_modify, BUFSIZ, 1, 1000, buffer_after);
 	if (handle_after == NULL) {
 		fprintf(stdout, "Could not open device: %s", interface_after_modify);
 		return -1;
