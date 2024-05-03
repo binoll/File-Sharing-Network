@@ -3,9 +3,10 @@
 #include <netinet/tcp.h>
 #include <netinet/ether.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
-int BUFFER_SIZE = 256;
+#define BUFFER_SIZE 256
 
 struct tcphdr* check_tcp_segment(const u_char* packet) {
 	const struct ether_header* eth_header = (struct ether_header*) packet;
@@ -22,26 +23,23 @@ struct tcphdr* check_tcp_segment(const u_char* packet) {
 	return NULL;
 }
 
-void modify_tcp_segment(const u_char* packet) {
-	struct tcphdr* tcp_header = check_tcp_segment(packet);
+void modify_tcp_segment(struct tcphdr* tcp_header) {
 	if (tcp_header != NULL) {
-		tcp_header->urg = tcp_header->urg + 1;
+		tcp_header->urg_ptr = htons(tcp_header->urg_ptr - 1);
 	}
 }
 
-void tcp_segment_before(const u_char* packet, const char* interface) {
-	struct tcphdr* tcp_header = check_tcp_segment(packet);
+void tcp_segment_before(struct tcphdr* tcp_header, const char* interface) {
 	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%i\" on "
-		                "interface %s\n", tcp_header->urg, interface);
+		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%hu\" on interface %s\n", htons(tcp_header->urg_ptr),
+		        interface);
 	}
 }
 
-void tcp_segment_after(const u_char* packet, const char* interface) {
-	struct tcphdr* tcp_header = check_tcp_segment(packet);
+void tcp_segment_after(struct tcphdr* tcp_header, const char* interface) {
 	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%i\" on "
-		                "interface %s\n", tcp_header->urg, interface);
+		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%hu\" on interface %s\n", htons(tcp_header->urg_ptr),
+		        interface);
 	}
 }
 
@@ -49,11 +47,10 @@ int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	char interface[BUFFER_SIZE];
 	pcap_t* handle_before = NULL;
-	pcap_t* handle_after = NULL;
 	const u_char* packet = NULL;
 	struct pcap_pkthdr header;
 
-	if (argc != 3) {
+	if (argc != 2) {
 		fprintf(stdout, "Usage: %s (interface)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
@@ -68,16 +65,22 @@ int main(int argc, char* argv[]) {
 
 	for (unsigned long long i = 0;; ++i) {
 		packet = pcap_next(handle_before, &header);
-		if (packet == NULL || check_tcp_segment(packet) == NULL) {
+		if (packet == NULL) {
 			continue;
 		}
+
+		struct tcphdr* tcp_header = check_tcp_segment(packet);
+		if (tcp_header == NULL) {
+			continue;
+		}
+
 		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
-		tcp_segment_before(packet, interface);
-		modify_tcp_segment(packet);
-		tcp_segment_after(packet, interface);
+		tcp_segment_before(tcp_header, interface);
+		modify_tcp_segment(tcp_header);
+		tcp_segment_after(tcp_header, interface);
 		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
+
 	pcap_close(handle_before);
-	pcap_close(handle_after);
 	return 0;
 }
