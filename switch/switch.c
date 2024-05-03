@@ -37,14 +37,7 @@ void tcp_segment_before(const u_char* packet, const char* interface) {
 	}
 }
 
-void tcp_segment_after(pcap_t* handle, const char* interface) {
-	struct pcap_pkthdr header;
-
-	const u_char* packet = pcap_next(handle, &header);
-	if (packet == NULL) {
-		return;
-	}
-
+void tcp_segment_after(const u_char* packet, const char* interface) {
 	struct tcphdr* tcp_header = check_tcp_segment(packet);
 	if (tcp_header != NULL) {
 		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%i\" on "
@@ -91,7 +84,7 @@ int main(int argc, char* argv[]) {
 		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
 		tcp_segment_before(packet, interface_before_modify);
 		modify_tcp_segment(packet);
-		tcp_segment_after(handle_after, interface_after_modify);
+		tcp_segment_after(packet, interface_after_modify);
 		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
 
