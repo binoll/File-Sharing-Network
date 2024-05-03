@@ -46,33 +46,23 @@ void tcp_segment_after(const u_char* packet, const char* interface) {
 }
 
 int main(int argc, char* argv[]) {
-	char buffer_before[PCAP_ERRBUF_SIZE];
-	char buffer_after[PCAP_ERRBUF_SIZE];
+	char buffer[PCAP_ERRBUF_SIZE];
+	char interface[BUFFER_SIZE];
 	pcap_t* handle_before = NULL;
 	pcap_t* handle_after = NULL;
 	const u_char* packet = NULL;
-	char interface_before_modify[BUFFER_SIZE];
-	char interface_after_modify[BUFFER_SIZE];
 	struct pcap_pkthdr header;
 
 	if (argc != 3) {
-		fprintf(stdout, "Usage: %s (interface_before_modify) (interface_after_modify)\n", argv[0]);
+		fprintf(stdout, "Usage: %s (interface)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	strcpy(interface_before_modify, argv[1]);
-	strcpy(interface_after_modify, argv[2]);
+	strcpy(interface, argv[1]);
 
-	handle_before = pcap_open_live(interface_before_modify, BUFSIZ, 1, 1000, buffer_before);
+	handle_before = pcap_open_live(interface, BUFSIZ, 1, 1000, buffer);
 	if (handle_before == NULL) {
-		fprintf(stdout, "\nCould not open device: %s", interface_before_modify);
-		return -1;
-	}
-
-	handle_after = pcap_open_live(interface_after_modify, BUFSIZ, 1, 1000, buffer_after);
-	if (handle_after == NULL) {
-		fprintf(stdout, "\nCould not open device: %s", interface_after_modify);
-		pcap_close(handle_before);
+		fprintf(stdout, "\nCould not open device: %s", interface);
 		return -1;
 	}
 
@@ -82,12 +72,11 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
-		tcp_segment_before(packet, interface_before_modify);
+		tcp_segment_before(packet, interface);
 		modify_tcp_segment(packet);
-		tcp_segment_after(packet, interface_after_modify);
+		tcp_segment_after(packet, interface);
 		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
-
 	pcap_close(handle_before);
 	pcap_close(handle_after);
 	return 0;
