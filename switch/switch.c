@@ -31,112 +31,68 @@ void modify_tcp_segment(const u_char* packet) {
 	}
 }
 
-void* tcp_segment_before(void* arg) {
-	char buffer[PCAP_ERRBUF_SIZE];
-	char interface[BUFFER_SIZE];
-	pcap_t* handle = NULL;
-	const u_char* packet = NULL;
-	struct pcap_pkthdr* header = NULL;
-
-	strcpy(interface, arg);
-
-	handle = pcap_open_live(interface, BUFSIZ, 1, 1000, buffer);
-	if (handle == NULL) {
-		fprintf(stdout, "Could not open device: %s", interface);
-		return NULL;
+void tcp_segment_before(const u_char* packet, const char* interface) {
+	struct tcphdr* tcp_header = check_tcp_segment(packet);
+	if (tcp_header != NULL) {
+		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%i\" on "
+		                "interface %s", tcp_header->urg, interface);
 	}
-
-	while (true) {
-		packet = pcap_next(handle, header);
-		if (packet == NULL) {
-			continue;
-		}
-
-		struct tcphdr* tcp_header = check_tcp_segment(packet);
-		if (tcp_header != NULL) {
-			fprintf(stdout, "TCP segment flag \"URG\" before modify \"%i\" on "
-			                "interface %s", tcp_header->urg, interface);
-		}
-	}
-	pcap_close(handle);
-	return 0;
 }
 
-void* tcp_segment_after(void* arg) {
-	char buffer[PCAP_ERRBUF_SIZE];
-	pcap_t* handle = NULL;
-	const u_char* packet = NULL;
-	struct pcap_pkthdr* header = NULL;
-	char interface[BUFFER_SIZE];
-
-	strcpy(interface, arg);
-
-	handle = pcap_open_live(interface, BUFSIZ, 1, 1000, buffer);
-	if (handle == NULL) {
-		fprintf(stdout, "Could not open device: %s", interface);
-		return NULL;
+void tcp_segment_after(pcap_t* handle, const char* interface) {
+	u_char* packet = pcap_next(handle, NULL);
+	if (packet == NULL) {
+		return;
 	}
 
-	while (true) {
-		packet = pcap_next(handle, header);
-		if (packet == NULL) {
-			continue;
-		}
-
-		struct tcphdr* tcp_header = check_tcp_segment(packet);
-		if (tcp_header != NULL) {
-			fprintf(stdout, "TCP segment flag \"URG\" after modify \"%i\" on "
-			                "interface %s", tcp_header->urg, interface);
-		}
+	struct tcphdr* tcp_header = check_tcp_segment(packet);
+	if (tcp_header != NULL) {
+		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%i\" on "
+		                "interface %s", tcp_header->urg, interface);
 	}
-	pcap_close(handle);
-	return 0;
 }
 
 int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
-	pcap_t* handle = NULL;
-	const u_char* packet = NULL;
+	pcap_t* handle_before = NULL;
+	pcap_t* handle_after = NULL;
+	u_char* packet = NULL;
 	char interface_before_modify[BUFFER_SIZE];
-	char interface_modify[BUFFER_SIZE];
 	char interface_after_modify[BUFFER_SIZE];
-	pthread_t thread_before_modify;
-	pthread_t thread_after_modify;
 
-	if (argc != 4) {
-		fprintf(stdout, "Usage: %s (interface_before_modify) (interface_modify) (interface_after_modify)\n", argv[0]);
+	if (argc != 3) {
+		fprintf(stdout, "Usage: %s (interface_before_modify) (interface_after_modify)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	strcpy(interface_before_modify, argv[1]);
-	strcpy(interface_modify, argv[2]);
-	strcpy(interface_after_modify, argv[3]);
+	strcpy(interface_after_modify, argv[2]);
 
-	handle = pcap_open_live(interface_modify, BUFSIZ, 1, 1000, buffer);
-	if (handle == NULL) {
-		fprintf(stdout, "Could not open device: %s", interface_modify);
+	handle_before = pcap_open_live(interface_before_modify, BUFSIZ, 1, 1000, buffer);
+	if (handle_before == NULL) {
+		fprintf(stdout, "Could not open device: %s", interface_before_modify);
 		return -1;
 	}
 
-	if (pthread_create(&thread_before_modify, NULL, tcp_segment_before, interface_before_modify) != 0) {
-		fprintf(stdout, "Error creating thread_before_modify\n");
+	handle_after = pcap_open_live(interface_after_modify, BUFSIZ, 1, 1000, buffer);
+	if (handle_after == NULL) {
+		fprintf(stdout, "Could not open device: %s", interface_after_modify);
 		return -1;
 	}
-	if (pthread_create(&thread_after_modify, NULL, tcp_segment_after, interface_after_modify) != 0) {
-		fprintf(stdout, "Error creating thread_after_modify\n");
-		return -1;
-	}
-	pthread_detach(thread_before_modify);
-	pthread_detach(thread_after_modify);
 
-	while (true) {
-		packet = pcap_next(handle, NULL);
+	for (unsigned long long i = 0;; ++i) {
+		packet = pcap_next(handle_before, NULL);
 
 		if (packet == NULL) {
 			continue;
 		}
+		fprintf(stdout, "+-------------Start of TCP segment %llu-------------+", i);
+		tcp_segment_before(packet, interface_before_modify);
 		modify_tcp_segment(packet);
+		tcp_segment_after(handle_after, interface_after_modify);
+		fprintf(stdout, "+-------------End of TCP segment %llu-------------+", i);
 	}
-	pcap_close(handle);
+	pcap_close(handle_before);
+	pcap_close(handle_after);
 	return 0;
 }
