@@ -25,7 +25,7 @@ struct tcphdr* check_tcp_segment(const u_char* packet) {
 
 void modify_tcp_segment(struct tcphdr* tcp_header) {
 	if (tcp_header != NULL) {
-		tcp_header->urg_ptr = htons(tcp_header->urg_ptr - 1);
+		tcp_header->urg_ptr = htons(tcp_header->urg_ptr + 1);
 	}
 }
 
@@ -80,7 +80,6 @@ int main(int argc, char* argv[]) {
 		tcp_segment_after(tcp_header, interface);
 		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
 	}
-
 	pcap_close(handle_before);
 	return 0;
 }
