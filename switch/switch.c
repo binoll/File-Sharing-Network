@@ -30,7 +30,6 @@ void modify_tcp_segment(struct tcphdr* tcp_header) {
 	}
 }
 
-
 void tcp_segment_before(struct tcphdr* tcp_header, const char* interface) {
 	if (tcp_header != NULL) {
 		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%hu\" on interface %s\n", ntohs(tcp_header->urg_ptr),

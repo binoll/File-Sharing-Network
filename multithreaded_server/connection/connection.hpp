@@ -9,16 +9,12 @@ class Connection {
 
 	~Connection();
 
-	void waitConnection();
-
-	static bool isConnect(int32_t, int32_t);
+	void waitConnection(int32_t, int32_t);
 
  private:
-	static int32_t getPort();
+	void closeConnection(int32_t, int32_t);
 
-	static bool checkConnection(int32_t);
-
-	void processingClients(int32_t client_socket_listen, int32_t client_socket_communicate);
+	void processingClients(int32_t, int32_t);
 
 	static int64_t sendMessage(int32_t, const std::string&, int32_t);
 
@@ -34,27 +30,29 @@ class Connection {
 
 	int64_t sendList(int32_t);
 
-	int64_t sendFile(int32_t, const std::string&);
+	int64_t sendFile(int32_t, std::string&);
 
-	std::vector<std::pair<int32_t, int32_t>> findSocket(const std::string& filename);
+	std::vector<std::pair<int32_t, int32_t>> findSocket(const std::string&);
 
 	std::vector<std::string> getListFiles();
 
 	int64_t getSize(const std::string&);
 
-	void updateStorage();
+	void addFileToStorage(std::pair<int32_t, int32_t>, std::string&, int64_t, const std::string&);
 
-	void storeFiles(std::pair<int32_t, int32_t>, const std::string&, int64_t, const std::string&);
+	void modifyFileInStorage(std::pair<int32_t, int32_t> pair, std::string& filename, int64_t size, const std::string& hash);
+
+	void deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::string& filename, int64_t size, const std::string& hash);
+
+	int64_t updateStorage(std::pair<int32_t, int32_t>);
 
 	void removeClients(std::pair<int32_t, int32_t>);
 
-	static void split(const std::string&, char, std::vector<std::string>&);
-
 	static std::string removeIndex(std::string);
 
-	bool isFilenameModify(const std::string&);
+	static void split(const std::string&, char, std::vector<std::string>&);
 
-	bool isFilenameChange(int32_t, const std::string&);
+	bool isFileExistOnClient(int32_t socket, const std::string& filename);
 
 	int32_t socket_listen { };
 	int32_t socket_communicate { };

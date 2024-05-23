@@ -29,7 +29,7 @@ class CommandLine {
 
 	static std::string getColorString(const ConsoleColor&);
 
-	void exit();
+	static void exit();
 
 	static void help();
 

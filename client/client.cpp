@@ -7,5 +7,6 @@ int32_t main() {
 	CommandLine command_line(current_path);
 
 	command_line.run();
+
 	return EXIT_SUCCESS;
 }

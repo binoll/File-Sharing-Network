@@ -25,7 +25,7 @@ MITM коммутатор модифицирует указатель срочн
 
 ## Dependencies
 ```bash
-sudo apt install libboost-all-dev libpcap-dev -y 
+sudo apt install libboost-all-dev libpcap-dev libssl-dev -y 
 ```
 
 ## Build

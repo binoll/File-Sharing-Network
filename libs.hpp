@@ -13,6 +13,7 @@
 #include <mutex>
 #include <list>
 #include <map>
+#include <set>
 
 #include <sys/socket.h>
 #include <dirent.h>
@@ -21,6 +22,8 @@
 #include <boost/log/trivial.hpp>
 #include <boost/crc.hpp>
 
+#include <openssl/evp.h>
+
 #define BUFFER_SIZE 1024
 
-const std::vector<std::string> commands = {"list", "get", "exit", "error", "exist"};
+const std::vector<std::string> commands = {"list", "get", "error", "exist", "modify", "add", "delete", "change"};

@@ -51,10 +51,10 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 
 		std::cout << "[*] Enter the IP address: ";
 		std::cin >> ip;
-		std::cout << "[*] Enter the port for communication: ";
-		std::cin >> str_port_listen;
 		std::cout << "[*] Enter the port for listening: ";
 		std::cin >> str_port_communicate;
+		std::cout << "[*] Enter the port for communication: ";
+		std::cin >> str_port_listen;
 
 		try {
 			port_listen = std::stoi(str_port_listen);
@@ -75,11 +75,6 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 void CommandLine::run() {
 	while (true) {
 		std::string command;
-
-		if (!connection.isConnection()) {
-			std::cout << "[-] The server is not available" << std::endl;
-			break;
-		}
 
 		std::cout << "[*] Enter the command: ";
 		std::cin >> command;
@@ -106,10 +101,11 @@ void CommandLine::run() {
 				continue;
 			}
 			default: {
-				std::cout << "[-] This command does not exist." << std::endl;
+				std::cout << "[-] This command does not exist" << std::endl;
 				continue;
 			}
 		}
+
 		break;
 	}
 }
@@ -134,10 +130,6 @@ std::string CommandLine::getColorString(const ConsoleColor& color) {
 }
 
 void CommandLine::exit() {
-	if (!connection.exit()) {
-		std::cout << "[-] Failed to close the connection properly." << std::endl;
-		return;
-	}
 	std::cout << "+=========================+" << std::endl;
 	std::cout << "|        Goodbye!         |" << std::endl;
 	std::cout << "+=========================+" << std::endl;
@@ -145,7 +137,7 @@ void CommandLine::exit() {
 
 void CommandLine::help() {
 	std::cout << "[*] Available commands:" << std::endl
-			<< "1. exit" << std::endl
+			<< "1. closeConnection" << std::endl
 			<< "2. help" << std::endl
 			<< "3. list" << std::endl
 			<< "4. get filename" << std::endl;
@@ -185,10 +177,12 @@ int8_t CommandLine::processingCommand(const std::string& command) {
 	if (command.empty()) {
 		return -1;
 	}
+
 	for (size_t i = 0; i < commands.size(); ++i) {
 		if (command.find(commands[i]) == 0) {
 			return static_cast<int8_t>(i);
 		}
 	}
+
 	return -1;
 }
