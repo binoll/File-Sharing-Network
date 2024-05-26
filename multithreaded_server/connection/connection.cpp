@@ -155,10 +155,10 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 
 				if (tokens.size() == 4) {
 					filename = tokens[1];
-					hash = tokens[2];
+					hash = tokens[3];
 
 					try {
-						size = static_cast<int64_t>(std::stoull(tokens[3]));
+						size = static_cast<int64_t>(std::stoull(tokens[2]));
 					} catch (const std::exception& err) {
 						BOOST_LOG_TRIVIAL(error) << err.what() << std::endl;
 						continue;

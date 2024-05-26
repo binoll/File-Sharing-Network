@@ -52,6 +52,8 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		return false;
 	}
 
+	updateDir();
+
 	if (sendList(socket_listen) < 0) {
 		std::cout << "[-] Failed send the list of files" << std::endl;
 		return false;
