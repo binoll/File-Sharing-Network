@@ -273,6 +273,9 @@ void Connection::processingServer() {
 				std::cout << std::endl << "[-] Can not rename the file \"" << old_filename << '\"' << std::endl;
 				continue;
 			}
+
+			std::cout << std::endl << "[+] Rename the file \"" << old_filename << "\" to " << '\"' <<
+					new_filename << '\"' << std::endl;
 		} else if (command.empty()) {
 			break;
 		}
@@ -497,7 +500,7 @@ std::vector<std::string> Connection::updateDir() {
 				if (it == storage.end()) {
 					storage[path] = last_write_time;
 
-					auto size = static_cast<int64_t>(std::filesystem::file_size(item));
+					auto size = static_cast<int64_t>(std::filesystem::file_size(item.path()));
 					std::string hash = calculateFileHash(path);
 
 					if (hash.empty() || size < 0) {
@@ -517,7 +520,7 @@ std::vector<std::string> Connection::updateDir() {
 					if (it->second != last_write_time) {
 						storage[path] = last_write_time;
 
-						auto size = static_cast<int64_t>(std::filesystem::file_size(item));
+						auto size = static_cast<int64_t>(std::filesystem::file_size(item.path()));
 						std::string hash = calculateFileHash(path);
 
 						if (hash.empty() || size < 0) {

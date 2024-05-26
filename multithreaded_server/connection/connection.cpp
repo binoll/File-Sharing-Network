@@ -478,7 +478,7 @@ void Connection::deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::st
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto it = storage.begin(); it != storage.end();) {
-		if ((it->first.first == pair.first || it->first.second == pair.second) &&
+		if (it->first.first == pair.first && it->first.second == pair.second &&
 				it->second.filename == filename) {
 			it = storage.erase(it);
 		} else {
