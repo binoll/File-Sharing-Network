@@ -506,7 +506,8 @@ std::vector<std::string> Connection::updateDir() {
 					message.assign(command_add).append(":")
 							.append(item.path().filename().string()).append(":")
 							.append(std::to_string(size)).append(":")
-							.append(hash);
+							.append(hash)
+							.append(" ");
 
 					list.emplace_back(message);
 				} else {
@@ -524,8 +525,8 @@ std::vector<std::string> Connection::updateDir() {
 						message.assign(command_modify).append(":")
 								.append(item.path().filename().string()).append(":")
 								.append(std::to_string(size)).append(":")
-								.append(hash);
-
+								.append(hash)
+								.append(" ");
 						list.emplace_back(message);
 					}
 				}
@@ -536,7 +537,10 @@ std::vector<std::string> Connection::updateDir() {
 
 		for (auto it = storage.begin(); it != storage.end(); ++it) {
 			if (!std::filesystem::exists(it->first)) {
-				message.assign(command_delete).append(":").append(std::filesystem::path(it->first).filename().string());
+				message.assign(command_delete)
+						.append(":")
+						.append(std::filesystem::path(it->first).filename().string())
+						.append(" ");
 				it = storage.erase(it);
 
 				list.emplace_back(message);
@@ -553,21 +557,9 @@ std::vector<std::string> Connection::updateDir() {
 
 int64_t Connection::sendUpdatedChanges(int32_t socket, const std::string& command) {
 	int64_t total_bytes = 0;
-	auto filenames = getListFiles();
 
-	for (const auto& filename : filenames) {
-		std::ostringstream oss;
-		std::string hash = calculateFileHash(filename);
-		int64_t size = getFileSize(filename);
-
-		if (hash.empty() || size < 0) {
-			return -1;
-		}
-
-		oss << command << ':' << filename << ':' << size << ':' << hash << ' ';
-		sendMessage(socket, oss.str(), MSG_NOSIGNAL | MSG_CONFIRM);
-		total_bytes += static_cast<int64_t>(oss.str().size());
-	}
+	sendMessage(socket, command, MSG_NOSIGNAL | MSG_CONFIRM);
+	total_bytes += static_cast<int64_t>(command.size());
 
 	return total_bytes;
 }

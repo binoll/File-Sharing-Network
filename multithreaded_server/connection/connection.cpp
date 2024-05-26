@@ -141,35 +141,41 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 		} else if (command.compare(0, command_add.length(), command_add) == 0 ||
 				command.compare(0, command_delete.length(), command_delete) == 0 ||
 				command.compare(0, command_modify.length(), command_modify) == 0) {
-			std::vector<std::string> tokens;
+			std::vector<std::string> messages;
 			std::string filename;
 			std::string hash;
 			int64_t size;
 
-			split(command, ':', tokens);
+			split(command, ' ', messages);
 
-			if (tokens.size() == 4) {
-				filename = tokens[1];
-				hash = tokens[2];
+			for (auto& item : messages) {
+				std::vector<std::string> tokens;
 
-				try {
-					size = static_cast<int64_t>(std::stoull(tokens[3]));
-				} catch (const std::exception& err) {
-					BOOST_LOG_TRIVIAL(error) << err.what() << std::endl;
+				split(item, ':', tokens);
+
+				if (tokens.size() == 4) {
+					filename = tokens[1];
+					hash = tokens[2];
+
+					try {
+						size = static_cast<int64_t>(std::stoull(tokens[3]));
+					} catch (const std::exception& err) {
+						BOOST_LOG_TRIVIAL(error) << err.what() << std::endl;
+						continue;
+					}
+				} else if (tokens.size() == 2) {
+					filename = tokens[1];
+				} else {
 					continue;
 				}
-			} else if (tokens.size() == 2) {
-				filename = tokens[1];
-			} else {
-				continue;
-			}
 
-			if (command.compare(0, command_add.length(), command_add) == 0) {
-				addFileToStorage(pair, filename, size, hash);
-			} else if (command.compare(0, command_modify.length(), command_modify) == 0) {
-				modifyFileInStorage(pair, filename, size, hash);
-			} else if (command.compare(0, command_delete.length(), command_delete) == 0) {
-				deleteFileFromStorage(pair, filename);
+				if (command.compare(0, command_add.length(), command_add) == 0) {
+					addFileToStorage(pair, filename, size, hash);
+				} else if (command.compare(0, command_modify.length(), command_modify) == 0) {
+					modifyFileInStorage(pair, filename, size, hash);
+				} else if (command.compare(0, command_delete.length(), command_delete) == 0) {
+					deleteFileFromStorage(pair, filename);
+				}
 			}
 
 			updateStorage(pair);

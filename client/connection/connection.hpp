@@ -40,7 +40,7 @@ class Connection {
 
     std::vector<std::string> updateDir();
 
-	int64_t sendUpdatedChanges(int32_t, const std::string&);
+	static int64_t sendUpdatedChanges(int32_t, const std::string&);
 
 	bool renameFile(const std::string&, const std::string&);
 
