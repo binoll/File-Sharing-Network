@@ -505,7 +505,8 @@ std::vector<std::string> Connection::updateDir() {
 						return list;
 					}
 
-					message.assign(command_add).append(":")
+					message.assign(command_add)
+							.append(":")
 							.append(item.path().filename().string()).append(":")
 							.append(std::to_string(size)).append(":")
 							.append(hash)
