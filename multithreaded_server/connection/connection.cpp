@@ -171,10 +171,13 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 
 				if (command.compare(0, command_add.length(), command_add) == 0) {
 					addFileToStorage(pair, filename, size, hash);
+					BOOST_LOG_TRIVIAL(info) << "Stored the file \"" << filename << '\"' << std::endl;
 				} else if (command.compare(0, command_modify.length(), command_modify) == 0) {
 					modifyFileInStorage(pair, filename, size, hash);
+					BOOST_LOG_TRIVIAL(info) << "Change the file \"" << filename << '\"' << std::endl;
 				} else if (command.compare(0, command_delete.length(), command_delete) == 0) {
 					deleteFileFromStorage(pair, filename);
+					BOOST_LOG_TRIVIAL(info) << "Delete the file \"" << filename << '\"' << std::endl;
 				}
 			}
 
@@ -475,7 +478,7 @@ void Connection::deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::st
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto it = storage.begin(); it != storage.end();) {
-		if (it->first.first == pair.first && it->first.second == pair.second &&
+		if ((it->first.first == pair.first || it->first.second == pair.second) &&
 				it->second.filename == filename) {
 			it = storage.erase(it);
 		} else {
