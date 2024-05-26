@@ -113,6 +113,7 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 
 	while (true) {
 		std::string command = "empty";
+
 		receiveMessage(client_socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
 		if (command == command_list) {
@@ -146,17 +147,20 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 			int64_t size;
 
 			split(command, ':', tokens);
-			filename = tokens[1];
-			hash = tokens[2];
 
-			if (tokens.size() < 3) {
-				continue;
-			}
+			if (tokens.size() == 4) {
+				filename = tokens[1];
+				hash = tokens[2];
 
-			try {
-				size = static_cast<int64_t>(std::stoull(tokens[3]));
-			} catch (const std::exception& err) {
-				BOOST_LOG_TRIVIAL(error) << err.what() << std::endl;
+				try {
+					size = static_cast<int64_t>(std::stoull(tokens[3]));
+				} catch (const std::exception& err) {
+					BOOST_LOG_TRIVIAL(error) << err.what() << std::endl;
+					continue;
+				}
+			} else if (tokens.size() == 2) {
+				filename = tokens[1];
+			} else {
 				continue;
 			}
 
@@ -165,7 +169,7 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 			} else if (command.compare(0, command_modify.length(), command_modify) == 0) {
 				modifyFileInStorage(pair, filename, size, hash);
 			} else if (command.compare(0, command_delete.length(), command_delete) == 0) {
-				deleteFileFromStorage(pair, filename, size, hash);
+				deleteFileFromStorage(pair, filename);
 			}
 
 			updateStorage(pair);
@@ -461,14 +465,12 @@ void Connection::modifyFileInStorage(std::pair<int32_t, int32_t> pair, std::stri
 	}
 }
 
-void Connection::deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::string& filename,
-                                       int64_t size, const std::string& hash) {
+void Connection::deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex_storage);
 
 	for (auto it = storage.begin(); it != storage.end();) {
 		if (it->first.first == pair.first && it->first.second == pair.second &&
-				it->second.filename == filename && it->second.size == size &&
-				it->second.hash == hash) {
+				it->second.filename == filename) {
 			it = storage.erase(it);
 		} else {
 			++it;

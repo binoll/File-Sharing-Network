@@ -40,9 +40,9 @@ class Connection {
 
 	void addFileToStorage(std::pair<int32_t, int32_t>, std::string&, int64_t, const std::string&);
 
-	void modifyFileInStorage(std::pair<int32_t, int32_t> pair, std::string& filename, int64_t size, const std::string& hash);
+	void modifyFileInStorage(std::pair<int32_t, int32_t>, std::string&, int64_t, const std::string&);
 
-	void deleteFileFromStorage(std::pair<int32_t, int32_t> pair, std::string& filename, int64_t size, const std::string& hash);
+	void deleteFileFromStorage(std::pair<int32_t, int32_t>, std::string&);
 
 	int64_t updateStorage(std::pair<int32_t, int32_t>);
 

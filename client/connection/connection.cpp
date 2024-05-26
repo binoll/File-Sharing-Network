@@ -184,13 +184,28 @@ void Connection::processingServer() {
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1];
 	const std::string& command_error = commands[2];
+	const std::string& command_modify = commands[4];
+	const std::string& command_add = commands[5];
+	const std::string& command_delete = commands[6];
 	const std::string& command_change = commands[7];
 
 	while (true) {
-		std::string command;
+		std::string command = "empty";
+		std::vector<std::string> list;
+
 		receiveMessage(socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
 
-		updateDir();
+		list = updateDir();
+
+		for (auto& item : list) {
+			if (item.find(command_add) != std::string::npos) {
+				sendUpdatedChanges(socket_communicate, item);
+			} else if (item.find(command_delete) != std::string::npos) {
+				sendUpdatedChanges(socket_communicate, item);
+			} else if (item.find(command_modify) != std::string::npos) {
+				sendUpdatedChanges(socket_communicate, item);
+			}
+		}
 
 		if (command == command_list) {
 			bytes = sendList(socket_listen);
@@ -263,7 +278,7 @@ void Connection::processingServer() {
 }
 
 int64_t Connection::sendFile(int32_t socket, const std::string& filename, int64_t offset, int64_t size) {
-	std::lock_guard<std::mutex> lock(mutex_dir);
+	std::lock_guard<std::mutex> lock(mutex);
 
 	std::ifstream file(filename, std::ios::binary);
 	char buffer[BUFFER_SIZE];
@@ -384,7 +399,7 @@ int64_t Connection::processResponse(std::string& message) {
 
 std::vector<std::string> Connection::getListFiles() {
 	std::vector<std::string> vector;
-	std::lock_guard<std::mutex> lock(mutex_dir);
+	std::lock_guard<std::mutex> lock(mutex);
 
 	try {
 		std::filesystem::directory_iterator iterator(dir);
@@ -402,7 +417,7 @@ std::vector<std::string> Connection::getListFiles() {
 }
 
 int64_t Connection::getFileSize(const std::string& filename) {
-	std::lock_guard<std::mutex> lock(mutex_dir);
+	std::lock_guard<std::mutex> lock(mutex);
 	std::ifstream file(filename, std::ios::binary | std::ios::ate);
 
 	if (!file.is_open()) {
@@ -460,11 +475,12 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 	return oss.str();
 }
 
-bool Connection::updateDir() {
-	std::lock_guard<std::mutex> lock(mutex_dir);
+std::vector<std::string> Connection::updateDir() {
+	std::lock_guard<std::mutex> lock(mutex);
 	const std::string& command_modify = commands[4];
 	const std::string& command_add = commands[5];
 	const std::string& command_delete = commands[6];
+	std::vector<std::string> list;
 	std::string message;
 
 	try {
@@ -472,7 +488,7 @@ bool Connection::updateDir() {
 
 		for (const auto& item : iterator) {
 			if (std::filesystem::is_regular_file(item)) {
-				std::string path = item.path().string();
+				std::string path = std::filesystem::path(item).filename().string();
 				auto last_write_time = std::filesystem::last_write_time(item);
 
 				auto it = storage.find(path);
@@ -483,7 +499,8 @@ bool Connection::updateDir() {
 					std::string hash = calculateFileHash(path);
 
 					if (hash.empty() || size < 0) {
-						return false;
+						list.clear();
+						return list;
 					}
 
 					message.assign(command_add).append(":")
@@ -491,7 +508,7 @@ bool Connection::updateDir() {
 							.append(std::to_string(size)).append(":")
 							.append(hash);
 
-					sendUpdatedChanges(socket_communicate, message);
+					list.emplace_back(message);
 				} else {
 					if (it->second != last_write_time) {
 						storage[path] = last_write_time;
@@ -500,7 +517,8 @@ bool Connection::updateDir() {
 						std::string hash = calculateFileHash(path);
 
 						if (hash.empty() || size < 0) {
-							return false;
+							list.clear();
+							return list;
 						}
 
 						message.assign(command_modify).append(":")
@@ -508,28 +526,29 @@ bool Connection::updateDir() {
 								.append(std::to_string(size)).append(":")
 								.append(hash);
 
-						sendUpdatedChanges(socket_communicate, message);
+						list.emplace_back(message);
 					}
 				}
 			}
+
+			message.clear();
 		}
 
-		for (auto it = storage.begin(); it != storage.end();) {
+		for (auto it = storage.begin(); it != storage.end(); ++it) {
 			if (!std::filesystem::exists(it->first)) {
 				message.assign(command_delete).append(":").append(std::filesystem::path(it->first).filename().string());
-
-				sendUpdatedChanges(socket_communicate, message);
-
 				it = storage.erase(it);
-			} else {
-				++it;
+
+				list.emplace_back(message);
 			}
+
+			message.clear();
 		}
 	} catch (const std::exception& err) {
 		std::cout << "[-] Error: " << err.what() << std::endl;
 	}
 
-	return true;
+	return list;
 }
 
 int64_t Connection::sendUpdatedChanges(int32_t socket, const std::string& command) {
@@ -545,7 +564,7 @@ int64_t Connection::sendUpdatedChanges(int32_t socket, const std::string& comman
 			return -1;
 		}
 
-		oss << command << ':' << filename << ':' << size << ':' << hash;
+		oss << command << ':' << filename << ':' << size << ':' << hash << ' ';
 		sendMessage(socket, oss.str(), MSG_NOSIGNAL | MSG_CONFIRM);
 		total_bytes += static_cast<int64_t>(oss.str().size());
 	}

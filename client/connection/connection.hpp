@@ -38,7 +38,7 @@ class Connection {
 
 	static std::string calculateFileHash(const std::string&);
 
-	bool updateDir();
+    std::vector<std::string> updateDir();
 
 	int64_t sendUpdatedChanges(int32_t, const std::string&);
 
@@ -52,6 +52,6 @@ class Connection {
 	struct sockaddr_in addr_listen { };
 	struct sockaddr_in addr_communicate { };
 	std::thread thread;
-	std::mutex mutex_dir;
+	std::mutex mutex;
 	std::unordered_map<std::string, std::filesystem::file_time_type> storage;
 };
