@@ -52,8 +52,6 @@ bool Connection::connectToServer(const std::string& ip, int32_t port_listen, int
 		return false;
 	}
 
-	updateDir();
-
 	if (sendList(socket_listen) < 0) {
 		std::cout << "[-] Failed send the list of files" << std::endl;
 		return false;
@@ -184,30 +182,14 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 void Connection::processingServer() {
 	int64_t bytes;
 	const std::string& command_list = commands[0];
-	const std::string& command_get = commands[1];
-	const std::string& command_error = commands[2];
-	const std::string& command_modify = commands[4];
-	const std::string& command_add = commands[5];
-	const std::string& command_delete = commands[6];
-	const std::string& command_change = commands[7];
+	const std::string& command_get = commands[1] + ':';
+	const std::string& command_error = commands[3];
 
 	while (true) {
 		std::string command = "empty";
 		std::vector<std::string> list;
 
 		receiveMessage(socket_listen, command, MSG_DONTWAIT | MSG_NOSIGNAL);
-
-		list = updateDir();
-
-		for (auto& item : list) {
-			if (item.find(command_add) != std::string::npos) {
-				sendUpdatedChanges(socket_communicate, item);
-			} else if (item.find(command_delete) != std::string::npos) {
-				sendUpdatedChanges(socket_communicate, item);
-			} else if (item.find(command_modify) != std::string::npos) {
-				sendUpdatedChanges(socket_communicate, item);
-			}
-		}
 
 		if (command == command_list) {
 			bytes = sendList(socket_listen);
@@ -247,35 +229,6 @@ void Connection::processingServer() {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM);
 				std::cout << std::endl << "[-] Failed to open the file: " << filename << std::endl;
 			}
-		} else if (command.compare(0, command_change.length(), command_change) == 0) {
-			std::vector<std::string> tokens;
-			std::string old_filename;
-			std::string new_filename;
-
-			split(command, ':', tokens);
-
-			if (tokens.size() < 3) {
-				std::cout << std::endl << "[-] Invalid command format" << std::endl;
-				continue;
-			}
-
-			try {
-				old_filename = tokens[1];
-				new_filename = tokens[2];
-			} catch (const std::exception&) {
-				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << std::endl << "[-] Invalid command format" << std::endl;
-				continue;
-			}
-
-			if (!renameFile(old_filename, new_filename)) {
-				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
-				std::cout << std::endl << "[-] Can not rename the file \"" << old_filename << '\"' << std::endl;
-				continue;
-			}
-
-			std::cout << std::endl << "[+] Rename the file \"" << old_filename << "\" to " << '\"' <<
-					new_filename << '\"' << std::endl;
 		} else if (command.empty()) {
 			break;
 		}
@@ -343,7 +296,9 @@ int64_t Connection::sendList(int32_t socket) {
 	if (bytes < 0) {
 		return -1;
 	}
+
 	total_bytes += bytes;
+
 	return total_bytes;
 }
 
@@ -464,7 +419,7 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 	}
 
 	unsigned char hash[EVP_MAX_MD_SIZE];
-	unsigned int lengthOfHash = 0;
+	uint32_t lengthOfHash = 0;
 	if (EVP_DigestFinal_ex(mdctx, hash, &lengthOfHash) != 1) {
 		EVP_MD_CTX_free(mdctx);
 		return "";
@@ -473,120 +428,11 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 	EVP_MD_CTX_free(mdctx);
 
 	std::ostringstream oss;
-	for (unsigned int i = 0; i < lengthOfHash; ++i) {
+	for (uint32_t i = 0; i < lengthOfHash; ++i) {
 		oss << std::hex << std::setw(2) << std::setfill('0') << (int) hash[i];
 	}
 
 	return oss.str();
-}
-
-std::vector<std::string> Connection::updateDir() {
-	std::lock_guard<std::mutex> lock(mutex);
-	const std::string& command_modify = commands[4];
-	const std::string& command_add = commands[5];
-	const std::string& command_delete = commands[6];
-	std::vector<std::string> list;
-	std::string message;
-
-	try {
-		std::filesystem::directory_iterator iterator(dir);
-
-		for (const auto& item : iterator) {
-			if (std::filesystem::is_regular_file(item)) {
-				std::string path = std::filesystem::path(item).filename().string();
-				auto last_write_time = std::filesystem::last_write_time(item);
-
-				auto it = storage.find(path);
-				if (it == storage.end()) {
-					storage[path] = last_write_time;
-
-					auto size = static_cast<int64_t>(std::filesystem::file_size(item.path()));
-					std::string hash = calculateFileHash(path);
-
-					if (hash.empty() || size < 0) {
-						list.clear();
-						return list;
-					}
-
-					message.assign(command_add)
-							.append(":")
-							.append(item.path().filename().string()).append(":")
-							.append(std::to_string(size)).append(":")
-							.append(hash)
-							.append(" ");
-
-					list.emplace_back(message);
-				} else {
-					if (it->second != last_write_time) {
-						storage[path] = last_write_time;
-
-						auto size = static_cast<int64_t>(std::filesystem::file_size(item.path()));
-						std::string hash = calculateFileHash(path);
-
-						if (hash.empty() || size < 0) {
-							list.clear();
-							return list;
-						}
-
-						message.assign(command_modify).append(":")
-								.append(item.path().filename().string()).append(":")
-								.append(std::to_string(size)).append(":")
-								.append(hash)
-								.append(" ");
-						list.emplace_back(message);
-					}
-				}
-			}
-
-			message.clear();
-		}
-
-		for (auto it = storage.begin(); it != storage.end(); ++it) {
-			if (!std::filesystem::exists(it->first)) {
-				message.assign(command_delete)
-						.append(":")
-						.append(std::filesystem::path(it->first).filename().string())
-						.append(" ");
-				it = storage.erase(it);
-
-				list.emplace_back(message);
-			}
-
-			message.clear();
-		}
-	} catch (const std::exception& err) {
-		std::cout << "[-] Error: " << err.what() << std::endl;
-	}
-
-	return list;
-}
-
-int64_t Connection::sendUpdatedChanges(int32_t socket, const std::string& command) {
-	int64_t total_bytes = 0;
-
-	sendMessage(socket, command, MSG_NOSIGNAL | MSG_CONFIRM);
-	total_bytes += static_cast<int64_t>(command.size());
-
-	return total_bytes;
-}
-
-bool Connection::renameFile(const std::string& old_filename,
-                            const std::string& new_filename) {
-	std::filesystem::path old_file_path = std::filesystem::path(dir) / old_filename;
-	std::filesystem::path new_file_path = std::filesystem::path(dir) / new_filename;
-
-	if (!std::filesystem::exists(old_file_path)) {
-		return false;
-	}
-
-	std::error_code error_code;
-	std::filesystem::rename(old_file_path, new_file_path, error_code);
-
-	if (error_code) {
-		return false;
-	}
-
-	return true;
 }
 
 void Connection::split(const std::string& str, char delim, std::vector<std::string>& tokens) {

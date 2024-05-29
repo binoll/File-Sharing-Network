@@ -26,11 +26,13 @@ class Connection {
 
 	static int64_t processResponse(std::string&);
 
+	bool checkConnection(int32_t );
+
 	bool synchronization(int32_t, int32_t);
 
 	int64_t sendList(int32_t);
 
-	int64_t sendFile(int32_t, std::string&);
+	int64_t sendFile(int32_t, std::string);
 
 	std::vector<std::pair<int32_t, int32_t>> findSocket(const std::string&);
 
@@ -38,21 +40,21 @@ class Connection {
 
 	int64_t getSize(const std::string&);
 
-	void addFileToStorage(std::pair<int32_t, int32_t>, std::string&, int64_t, const std::string&);
+	void updateStorage();
 
-	void modifyFileInStorage(std::pair<int32_t, int32_t>, std::string&, int64_t, const std::string&);
-
-	void deleteFileFromStorage(std::pair<int32_t, int32_t>, std::string&);
-
-	int64_t updateStorage(std::pair<int32_t, int32_t>);
+	void storeFiles(std::pair<int32_t, int32_t>, const std::string&, int64_t, const std::string&);
 
 	void removeClients(std::pair<int32_t, int32_t>);
 
-	static std::string removeIndex(std::string);
-
 	static void split(const std::string&, char, std::vector<std::string>&);
 
-	bool isFileExistOnClient(int32_t socket, const std::string& filename);
+	static std::string removeIndex(std::string);
+
+	bool isFilenameModify(const std::string&);
+
+	bool isFilenameChange(int32_t, const std::string&);
+
+	bool isFileExistOnClient(int32_t, const std::string&);
 
 	int32_t socket_listen { };
 	int32_t socket_communicate { };
@@ -60,5 +62,5 @@ class Connection {
 	struct sockaddr_in addr_communicate { };
 	std::multimap<std::pair<int32_t, int32_t>, FileInfo> storage;
 	std::vector<std::thread> threads;
-	std::mutex mutex_storage;
+	std::mutex mutex;
 };

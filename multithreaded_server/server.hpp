@@ -9,5 +9,6 @@ struct FileInfo {
 	int64_t size;
 	std::string hash;
 	std::string filename;
-	bool is_filename_modify = false;
+	bool is_filename_changed;
+	bool is_filename_modify;
 };

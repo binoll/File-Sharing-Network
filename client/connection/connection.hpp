@@ -38,12 +38,6 @@ class Connection {
 
 	static std::string calculateFileHash(const std::string&);
 
-    std::vector<std::string> updateDir();
-
-	static int64_t sendUpdatedChanges(int32_t, const std::string&);
-
-	bool renameFile(const std::string&, const std::string&);
-
 	static void split(const std::string&, char, std::vector<std::string>&);
 
 	std::string dir;

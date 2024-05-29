@@ -68,6 +68,7 @@ CommandLine::CommandLine(std::string& path) : connection(path) {
 			std::cout << "[-] The connection could not be established" << std::endl;
 			continue;
 		}
+
 		break;
 	}
 }
@@ -126,6 +127,7 @@ std::string CommandLine::getColorString(const ConsoleColor& color) {
 			{ConsoleColor::Cyan,    "Cyan"},
 			{ConsoleColor::White,   "White"}
 	};
+
 	return map[color];
 }
 
