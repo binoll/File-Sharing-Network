@@ -26,4 +26,4 @@
 
 #define BUFFER_SIZE 1000
 
-const std::vector<std::string> commands = {"list", "get", "error", "exist", "modify", "add", "delete", "change"};
+const std::vector<std::string> commands = {"list", "get", "error", "exist"};

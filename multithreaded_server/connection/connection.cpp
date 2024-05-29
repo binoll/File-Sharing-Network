@@ -96,8 +96,8 @@ void Connection::processingClients(int32_t client_socket_listen, int32_t client_
 	int64_t bytes;
 	const std::string& command_list = commands[0];
 	const std::string& command_get = commands[1];
-	const std::string& command_exist = commands[2];
-	const std::string& command_error = commands[3];
+	const std::string& command_error = commands[2];
+	const std::string& command_exist = commands[3];
 
 	if (!synchronization(client_socket_listen, client_socket_communicate)) {
 		BOOST_LOG_TRIVIAL(error) << "The client can not connect. The storage could not be synchronized" << std::endl;

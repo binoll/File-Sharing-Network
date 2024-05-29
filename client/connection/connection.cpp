@@ -73,7 +73,7 @@ int64_t Connection::getFile(const std::string& filename) const {
 	int64_t message_size;
 	std::string message;
 	std::ofstream file;
-	const std::string command_get = commands[1] + ':' + filename;
+	const std::string& command_get = commands[1] + ':' + filename;
 	const std::string& command_error = commands[2];
 	const std::string& command_exist = commands[3];
 
@@ -182,8 +182,8 @@ int64_t Connection::getList(std::vector<std::string>& list) const {
 void Connection::processingServer() {
 	int64_t bytes;
 	const std::string& command_list = commands[0];
-	const std::string& command_get = commands[1] + ':';
-	const std::string& command_error = commands[3];
+	const std::string& command_get = commands[1];
+	const std::string& command_error = commands[2];
 
 	while (true) {
 		std::string command = "empty";
