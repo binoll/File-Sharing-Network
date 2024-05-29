@@ -389,6 +389,11 @@ int64_t Connection::getFileSize(const std::string& filename) {
 
 std::string Connection::calculateFileHash(const std::string& filename) {
 	std::ifstream file(filename, std::ios::binary);
+	char buffer[8192];
+	unsigned char hash[EVP_MAX_MD_SIZE];
+	uint32_t lengthOfHash = 0;
+	std::ostringstream oss;
+
 	if (!file.is_open()) {
 		return "";
 	}
@@ -403,7 +408,6 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 		return "";
 	}
 
-	char buffer[8192];
 	while (file.read(buffer, sizeof(buffer))) {
 		if (EVP_DigestUpdate(mdctx, buffer, file.gcount()) != 1) {
 			EVP_MD_CTX_free(mdctx);
@@ -418,8 +422,6 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 		}
 	}
 
-	unsigned char hash[EVP_MAX_MD_SIZE];
-	uint32_t lengthOfHash = 0;
 	if (EVP_DigestFinal_ex(mdctx, hash, &lengthOfHash) != 1) {
 		EVP_MD_CTX_free(mdctx);
 		return "";
@@ -427,7 +429,6 @@ std::string Connection::calculateFileHash(const std::string& filename) {
 
 	EVP_MD_CTX_free(mdctx);
 
-	std::ostringstream oss;
 	for (uint32_t i = 0; i < lengthOfHash; ++i) {
 		oss << std::hex << std::setw(2) << std::setfill('0') << (int) hash[i];
 	}
