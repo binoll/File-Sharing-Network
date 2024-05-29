@@ -26,7 +26,7 @@ class Connection {
 
 	static int64_t processResponse(std::string&);
 
-	bool checkConnection(int32_t );
+	static bool checkConnection(int32_t );
 
 	bool synchronization(int32_t, int32_t);
 

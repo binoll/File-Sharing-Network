@@ -212,9 +212,9 @@ void Connection::processingServer() {
 			}
 
 			try {
-				offset = static_cast<int64_t>(std::stoull(tokens[3]));
+				offset = static_cast<int64_t>(std::stoull(tokens[1]));
 				size = static_cast<int64_t>(std::stoull(tokens[2]));
-				filename = tokens[1];
+				filename = tokens[3];
 			} catch (const std::exception& err) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << std::endl << "[-] Invalid command format" << std::endl;
