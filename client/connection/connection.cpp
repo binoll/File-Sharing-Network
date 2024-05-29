@@ -262,7 +262,7 @@ void Connection::processingServer() {
 			try {
 				old_filename = tokens[1];
 				new_filename = tokens[2];
-			} catch (const std::exception& err) {
+			} catch (const std::exception&) {
 				sendMessage(socket_listen, command_error, MSG_CONFIRM | MSG_NOSIGNAL);
 				std::cout << std::endl << "[-] Invalid command format" << std::endl;
 				continue;
