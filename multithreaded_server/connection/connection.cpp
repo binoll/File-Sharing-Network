@@ -423,29 +423,39 @@ void Connection::updateStorage() {
 	std::unordered_map<std::string, int64_t> filename_count;
 	std::lock_guard<std::mutex> lock(mutex);
 
-	for (auto& entry : storage) {
-		++hash_count[entry.second.hash];
+	for (auto& item : storage) {
+		++hash_count[item.second.hash];
+		++filename_count[item.second.filename];
 	}
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
-			int64_t file_occurrences = hash_count[first->second.hash];
+			int64_t file_hash_count = hash_count[first->second.hash];
+			int64_t file_filename_count = filename_count[first->second.filename];
 
 			if (first->second.hash != second->second.hash &&
 					first->second.filename == second->second.filename) {
-				if (file_occurrences > 1) {
-					first->second.filename += '(' + std::to_string(file_occurrences - 1) + ')';
-					second->second.filename += '(' + std::to_string(file_occurrences) + ')';
+				if (file_filename_count > 1) {
+					first->second.filename += '(' + std::to_string(file_hash_count - 1) + ')';
+					second->second.filename += '(' + std::to_string(file_hash_count) + ')';
 					first->second.is_filename_modify = true;
 					second->second.is_filename_modify = true;
-					--hash_count[first->second.hash];
-					--hash_count[second->second.hash];
+					--filename_count[first->second.filename];
+					--filename_count[second->second.filename];
 				}
 			} else if (first->second.hash == second->second.hash &&
 					first->second.filename != second->second.filename) {
 				second->second.filename = first->second.filename;
 				second->second.is_filename_changed = true;
 			}
+		}
+	}
+
+	for (auto& item : storage) {
+		int64_t file_filename_count = filename_count[item.second.filename];
+
+		if (file_filename_count == 1 && item.second.is_filename_modify) {
+			item.second.filename = removeIndex(item.second.filename);
 		}
 	}
 }
