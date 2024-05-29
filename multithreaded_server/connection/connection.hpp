@@ -40,7 +40,7 @@ class Connection {
 
 	int64_t getSize(const std::string&);
 
-	void updateStorage();
+	void indexFiles();
 
 	void storeFiles(std::pair<int32_t, int32_t>, const std::string&, int64_t, const std::string&);
 

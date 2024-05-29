@@ -87,7 +87,7 @@ void Connection::closeConnection(int32_t client_socket_listen, int32_t client_so
 	std::pair pair = std::make_pair(client_socket_listen, client_socket_communicate);
 
 	removeClients(pair);
-	updateStorage();
+	indexFiles();
 	close(client_socket_listen);
 	close(client_socket_communicate);
 }
@@ -262,7 +262,7 @@ bool Connection::synchronization(int32_t client_socket_listen, int32_t client_so
 		}
 	}
 
-	updateStorage();
+	indexFiles();
 
 	return true;
 }
@@ -393,17 +393,19 @@ std::vector<std::pair<int32_t, int32_t>> Connection::findSocket(const std::strin
 }
 
 std::vector<std::string> Connection::getListFiles() {
-	std::set<std::string> unique_files;
-	std::vector<std::string> list;
+	std::unordered_map<std::string, int> filename_counts;
+	std::vector<std::string> unique_filenames;
 	std::lock_guard<std::mutex> lock(mutex);
 
-	for (auto& item : storage) {
-		unique_files.insert(item.second.filename);
+	for (const auto& entry : storage) {
+		filename_counts[entry.second.filename]++;
 	}
 
-	list = std::move(std::vector<std::string>(unique_files.begin(), unique_files.end()));
+	for (const auto& [filename, count] : filename_counts) {
+		unique_filenames.push_back(filename);
+	}
 
-	return list;
+	return unique_filenames;
 }
 
 int64_t Connection::getSize(const std::string& filename) {
@@ -418,44 +420,47 @@ int64_t Connection::getSize(const std::string& filename) {
 	return -1;
 }
 
-void Connection::updateStorage() {
-	std::unordered_map<std::string, int64_t> hash_count;
+void Connection::indexFiles() {
 	std::unordered_map<std::string, int64_t> filename_count;
+	std::unordered_map<std::string, std::unordered_set<std::string>> filename_hash_map;
 	std::lock_guard<std::mutex> lock(mutex);
 
-	for (auto& item : storage) {
-		++hash_count[item.second.hash];
-		++filename_count[item.second.filename];
+	for (auto& pair : storage) {
+		if (pair.second.is_filename_modify) {
+			pair.second.filename = removeIndex(pair.second.filename);
+		}
 	}
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
-			int64_t file_hash_count = hash_count[first->second.hash];
-			int64_t file_filename_count = filename_count[first->second.filename];
-
-			if (first->second.hash != second->second.hash &&
-					first->second.filename == second->second.filename) {
-				if (file_filename_count > 1) {
-					first->second.filename += '(' + std::to_string(file_hash_count) + ')';
-					second->second.filename += '(' + std::to_string(file_hash_count + 1) + ')';
-					first->second.is_filename_modify = true;
-					second->second.is_filename_modify = true;
-					--filename_count[first->second.filename];
-					--filename_count[second->second.filename];
-				}
-			} else if (first->second.hash == second->second.hash &&
+			if (first->second.hash == second->second.hash &&
 					first->second.filename != second->second.filename) {
 				second->second.filename = first->second.filename;
+				first->second.is_filename_changed = true;
 				second->second.is_filename_changed = true;
 			}
 		}
 	}
 
-	for (auto& item : storage) {
-		int64_t file_filename_count = filename_count[item.second.filename];
+	for (const auto& item : storage) {
+		filename_hash_map[item.second.filename].insert(item.second.hash);
+	}
 
-		if (file_filename_count == 1 && item.second.is_filename_modify) {
-			item.second.filename = removeIndex(item.second.filename);
+	for (auto& pair : filename_hash_map) {
+		auto file_hash_size = pair.second.size();
+		auto& filename = pair.first;
+
+		if (file_hash_size > 1) {
+			for (auto& first : pair.second) {
+				for (auto& second : storage) {
+					if (filename == second.second.filename && first == second.second.hash) {
+						second.second.filename += '(' + std::to_string(file_hash_size) + ')';
+						second.second.is_filename_modify = true;
+					}
+				}
+
+				--file_hash_size;
+			}
 		}
 	}
 }
