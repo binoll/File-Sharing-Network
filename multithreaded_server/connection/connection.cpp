@@ -436,8 +436,8 @@ void Connection::updateStorage() {
 			if (first->second.hash != second->second.hash &&
 					first->second.filename == second->second.filename) {
 				if (file_filename_count > 1) {
-					first->second.filename += '(' + std::to_string(file_hash_count - 1) + ')';
-					second->second.filename += '(' + std::to_string(file_hash_count) + ')';
+					first->second.filename += '(' + std::to_string(file_hash_count) + ')';
+					second->second.filename += '(' + std::to_string(file_hash_count + 1) + ')';
 					first->second.is_filename_modify = true;
 					second->second.is_filename_modify = true;
 					--filename_count[first->second.filename];
