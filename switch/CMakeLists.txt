@@ -7,5 +7,3 @@ add_executable(
         switch
         switch.c
 )
-
-target_link_libraries(switch pcap)
