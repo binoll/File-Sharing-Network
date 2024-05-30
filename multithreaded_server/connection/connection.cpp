@@ -306,6 +306,14 @@ int64_t Connection::sendFile(int32_t socket, std::string filename) {
 		return -2;
 	}
 
+	std::remove_if(
+			sockets.begin(),
+			sockets.end(),
+			[&](const std::pair<int32_t, int32_t>& pair) {
+				return pair.first == socket || pair.second == socket;
+			}
+	);
+
 	if (sockets.empty()) {
 		return -1;
 	}
