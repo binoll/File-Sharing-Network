@@ -302,10 +302,6 @@ int64_t Connection::sendFile(int32_t socket, std::string filename) {
 	const std::string& command_error = commands[2];
 	std::vector<std::pair<int32_t, int32_t>> sockets = findSocket(filename);
 
-	if (isFilenameModify(filename)) {
-		filename = removeIndex(filename);
-	}
-
 	if (isFileExistOnClient(socket, filename)) {
 		return -2;
 	}
@@ -330,6 +326,8 @@ int64_t Connection::sendFile(int32_t socket, std::string filename) {
 		struct timeval timeout { };
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
 		int32_t client_socket_communicate = sockets[i % sockets.size()].second;
+
+		filename = getOldFilename(client_socket_communicate, filename);
 
 		timeout.tv_sec = 10;
 		message = commands[1] + ':' + std::to_string(offset) + ':' + std::to_string(chunk_size) + ':' + filename;
@@ -384,7 +382,7 @@ std::vector<std::pair<int32_t, int32_t>> Connection::findSocket(const std::strin
 	for (const auto& entry : storage) {
 		std::string str;
 
-		if (entry.second.filename == filename) {
+		if (entry.second.current_filename == filename) {
 			vector.emplace_back(entry.first);
 		}
 	}
@@ -398,7 +396,7 @@ std::vector<std::string> Connection::getListFiles() {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (const auto& entry : storage) {
-		filename_counts[entry.second.filename]++;
+		filename_counts[entry.second.current_filename]++;
 	}
 
 	for (const auto& [filename, count] : filename_counts) {
@@ -412,7 +410,7 @@ int64_t Connection::getSize(const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (const auto& it : storage) {
-		if (it.second.filename == filename) {
+		if (it.second.current_filename == filename) {
 			return it.second.size;
 		}
 	}
@@ -427,15 +425,15 @@ void Connection::indexFiles() {
 
 	for (auto& pair : storage) {
 		if (pair.second.is_filename_modify) {
-			pair.second.filename = removeIndex(pair.second.filename);
+			pair.second.current_filename = removeIndex(pair.second.current_filename);
 		}
 	}
 
 	for (auto first = storage.begin(); first != storage.end(); ++first) {
 		for (auto second = std::next(first); second != storage.end(); ++second) {
 			if (first->second.hash == second->second.hash &&
-					first->second.filename != second->second.filename) {
-				second->second.filename = first->second.filename;
+					first->second.current_filename != second->second.current_filename) {
+				second->second.current_filename = first->second.current_filename;
 				first->second.is_filename_changed = true;
 				second->second.is_filename_changed = true;
 			}
@@ -443,7 +441,7 @@ void Connection::indexFiles() {
 	}
 
 	for (const auto& item : storage) {
-		filename_hash_map[item.second.filename].insert(item.second.hash);
+		filename_hash_map[item.second.current_filename].insert(item.second.hash);
 	}
 
 	for (auto& pair : filename_hash_map) {
@@ -453,8 +451,8 @@ void Connection::indexFiles() {
 		if (file_hash_size > 1) {
 			for (auto& first : pair.second) {
 				for (auto& second : storage) {
-					if (filename == second.second.filename && first == second.second.hash) {
-						second.second.filename += '(' + std::to_string(file_hash_size) + ')';
+					if (filename == second.second.current_filename && first == second.second.hash) {
+						second.second.current_filename += '(' + std::to_string(file_hash_size) + ')';
 						second.second.is_filename_modify = true;
 					}
 				}
@@ -467,7 +465,7 @@ void Connection::indexFiles() {
 
 void Connection::storeFiles(std::pair<int32_t, int32_t> pair, const std::string& filename, int64_t size,
                             const std::string& hash) {
-	FileInfo data {size, hash, filename, false};
+	FileInfo data {size, hash, filename, filename, false};
 	std::lock_guard<std::mutex> lock(mutex);
 
 	storage.insert(std::pair(pair, data));
@@ -478,11 +476,11 @@ void Connection::removeClients(std::pair<int32_t, int32_t> pair) {
 	auto range = storage.equal_range(pair);
 
 	for (auto it = range.first; it != range.second; ++it) {
-		std::string filename = removeIndex(it->second.filename);
+		std::string filename = removeIndex(it->second.current_filename);
 
 		for (auto& entry : storage) {
-			if (entry.second.filename == filename) {
-				entry.second.filename = removeIndex(entry.second.filename);
+			if (entry.second.current_filename == filename) {
+				entry.second.current_filename = removeIndex(entry.second.current_filename);
 			}
 		}
 	}
@@ -508,11 +506,12 @@ std::string Connection::removeIndex(std::string filename) {
 	return filename;
 }
 
-bool Connection::isFilenameModify(const std::string& filename) {
+bool Connection::isFilenameModify(int32_t socket, const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (auto& entry : storage) {
-		if (entry.second.filename == filename) {
+		if (entry.second.current_filename == filename &&
+				(entry.first.first == socket || entry.first.second == socket)) {
 			return entry.second.is_filename_modify;
 		}
 	}
@@ -520,23 +519,23 @@ bool Connection::isFilenameModify(const std::string& filename) {
 	return false;
 }
 
-bool Connection::isFilenameChange(int32_t socket, const std::string& filename) {
+std::string Connection::getOldFilename(int32_t socket, const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 
-	for (auto& entry : storage) {
-		if (entry.second.filename == filename && (entry.first.first == socket || entry.first.second == socket)) {
-			return entry.second.is_filename_changed;
+	for (auto& pair : storage) {
+		if ((pair.first.first == socket || pair.first.second == socket) && pair.second.is_filename_changed) {
+			return pair.second.old_filename;
 		}
 	}
 
-	return false;
+	return filename;
 }
 
 bool Connection::isFileExistOnClient(int32_t socket, const std::string& filename) {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	return std::ranges::any_of(storage, [&](const auto& item) {
-		return item.second.filename == filename &&
+		return item.second.current_filename == filename &&
 				(item.first.first == socket || item.first.second == socket);
 	});
 }

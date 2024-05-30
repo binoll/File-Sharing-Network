@@ -26,7 +26,7 @@ class Connection {
 
 	static int64_t processResponse(std::string&);
 
-	static bool checkConnection(int32_t );
+	static bool checkConnection(int32_t);
 
 	bool synchronization(int32_t, int32_t);
 
@@ -50,9 +50,9 @@ class Connection {
 
 	static std::string removeIndex(std::string);
 
-	bool isFilenameModify(const std::string&);
+	bool isFilenameModify(int32_t, const std::string&);
 
-	bool isFilenameChange(int32_t, const std::string&);
+	std::string getOldFilename(int32_t socket, const std::string& filename);
 
 	bool isFileExistOnClient(int32_t, const std::string&);
 
