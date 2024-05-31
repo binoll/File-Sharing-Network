@@ -1,5 +1,7 @@
 #include "switch.h"
 
+struct mac_entry mac_table[TABLE_SIZE];
+
 void update_mac_table(const u_char* mac, const char* interface) {
 	time_t current_time = time(NULL);
 

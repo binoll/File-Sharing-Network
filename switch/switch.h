@@ -31,6 +31,4 @@ struct handler_args {
 	struct config cfg;
 };
 
-struct mac_entry mac_table[TABLE_SIZE];
-
 extern void read_config(const char*, struct config*);
