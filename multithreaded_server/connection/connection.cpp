@@ -329,7 +329,7 @@ int64_t Connection::sendFile(int32_t socket, std::string filename) {
 		return -1;
 	}
 
-	for (int64_t i = 0, offset = 0; total_bytes < message_size; ++i, offset += bytes) {
+	for (int64_t i = 0, offset = 0; total_bytes < message_size;) {
 		char buffer[BUFFER_SIZE];
 		struct timeval timeout { };
 		int64_t chunk_size = std::min<int64_t>(message_size - offset, static_cast<int64_t>(BUFFER_SIZE));
@@ -377,6 +377,8 @@ int64_t Connection::sendFile(int32_t socket, std::string filename) {
 			continue;
 		}
 
+		++i;
+		offset += bytes;
 		total_bytes += bytes;
 	}
 

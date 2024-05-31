@@ -8,7 +8,7 @@ import logging
 
 BUFFER_SIZE = 1000
 BACKLOG = 100
-commands = ['list', 'get', 'exit', 'error', 'exist']
+commands = ['list', 'get', 'error', 'exist']
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('Logger')
@@ -19,7 +19,8 @@ class FileInfo:
                  is_filename_modify: bool = False) -> None:
         self.size = size
         self.hash = hash_value
-        self.filename = filename
+        self.current_filename = filename
+        self.old_filename = filename
         self.is_filename_changed = is_filename_changed
         self.is_filename_modify = is_filename_modify
 
@@ -89,22 +90,21 @@ class Connection:
 
     async def processing_clients(self, client_socket_listen: socket,
                                  client_socket_communicate: socket) -> None:
-        command_error = commands[3]
-        command_exist = commands[4]
+        command_list = commands[0]
+        command_get = commands[1]
+        command_error = commands[2]
+        command_exist = commands[3]
 
         try:
             while True:
                 command = await self.receive_message(client_socket_listen, BUFFER_SIZE)
 
-                if not command:
-                    return
-
-                if command == commands[0]:
+                if command == command_list:
                     result = await self.send_list(client_socket_listen)
 
                     if result < 0:
                         await self.send_message(client_socket_listen, command_error)
-                elif command.startswith(commands[1]):
+                elif command.startswith(command_get):
                     filename = command.split(':')[1]
                     result = await self.send_file(client_socket_listen, filename)
 
@@ -112,18 +112,19 @@ class Connection:
                         await self.send_message(client_socket_listen, command_error)
                     elif result == -2:
                         await self.send_message(client_socket_listen, command_exist)
-                elif command == commands[2]:
-                    self.remove_clients((client_socket_listen, client_socket_communicate))
-                    self.close_client_connections(client_socket_listen, client_socket_communicate)
-                    logger.info(f'Client disconnected: {client_socket_listen.getpeername()},'
-                                f' {client_socket_communicate.getpeername()}')
+                elif len(command) == 0:
                     break
+
+            logger.info(f'Client disconnected: {client_socket_listen.getpeername()},'
+                        f' {client_socket_communicate.getpeername()}')
+            self.remove_clients((client_socket_listen, client_socket_communicate))
+            self.close_client_connections(client_socket_listen, client_socket_communicate)
         except OSError as e:
             logger.error(e)
 
     async def synchronization(self, client_socket_listen: socket,
                               client_socket_communicate: socket) -> bool:
-        command_error = commands[3]
+        command_error = commands[2]
 
         try:
             message = await self.receive_message(client_socket_communicate, BUFFER_SIZE)
@@ -163,7 +164,7 @@ class Connection:
                 if not message or message == command_error:
                     return False
 
-            await self.index_files()
+            self.index_files()
 
             return True
         except OSError as e:
@@ -184,7 +185,7 @@ class Connection:
             buffer = await self.receive_bytes(sock, size)
             if buffer is None:
                 return None
-            return buffer.decode()
+            return buffer.decode('utf-8')
         except UnicodeDecodeError:
             return None
         except Exception as e:
@@ -202,8 +203,6 @@ class Connection:
     async def receive_bytes(self, sock: socket, size: int) -> Optional[bytes]:
         try:
             buffer = await self.loop.sock_recv(sock, size)
-            if not buffer:
-                return None
             return buffer
         except Exception as e:
             logger.error(e)
@@ -229,53 +228,57 @@ class Connection:
             logger.error(e)
             return -1
 
-    async def send_file(self, sock: socket, filename: str) -> int | None:
+    async def send_file(self, sock: socket, filename: str) -> int:
         try:
-            command_error = commands[3]
             message_size = self.get_size(filename)
+            command_error = commands[2]
 
-            if self.is_filename_modify(filename):
-                filename = self.remove_index(filename)
-
-            if self.is_file_exist_on_client(sock.fileno(), filename):
+            if self.is_file_exist_on_client(sock, filename):
                 return -2
 
-            message = f'{message_size}:'
-            await self.send_message(sock, message)
-
             sockets = self.find_socket(filename)
-
-            if sockets is None:
+            if not sockets:
                 return -1
 
-            sockets = [(pair[0], pair[1]) for pair in sockets if pair[0] != sock and pair[1] != sock]
+            sockets = [(pair[0], pair[1]) for pair in sockets if
+                       pair[0].fileno() != sock.fileno() and pair[1].fileno() != sock.fileno()]
 
+            message = f'{message_size}:'
+            bytes_sent = await self.send_message(sock, message)
+            if bytes_sent < 0:
+                return -1
+
+            total_bytes = 0
             for i, (_, client_socket_communicate) in enumerate(sockets):
                 for offset in range(0, message_size, BUFFER_SIZE):
                     client_socket_communicate = sockets[i % len(sockets)][1]
                     chunk_size = min(message_size - offset, BUFFER_SIZE)
 
-                    message = f'{commands[1]}:{offset}:{chunk_size}:{filename}'
                     if not self.check_connection(client_socket_communicate):
-                        return -1
+                        sockets.remove((_, client_socket_communicate))
 
-                    await self.send_message(client_socket_communicate, message)
+                    filename = await self.get_old_filename(client_socket_communicate, filename)
+
+                    message = f'{commands[1]}:{offset}:{chunk_size}:{filename}'
+
+                    bytes_sent = await self.send_message(client_socket_communicate, message)
+                    if bytes_sent < 0:
+                        continue
 
                     buffer = await self.receive_bytes(client_socket_communicate, chunk_size)
-
                     if not buffer:
-                        return -1
+                        continue
 
-                    try:
-                        buffer_str = str(buffer)
-                        if buffer_str == command_error:
-                            return -2
-                    except ValueError as e:
-                        logger.error(e)
-                        return -1
+                    if len(buffer) == len(command_error) and buffer.decode('utf-8') == command_error:
+                        return -2
 
-                    await self.send_bytes(sock, buffer)
-            return 0
+                    bytes_sent = await self.send_bytes(sock, buffer)
+                    if bytes_sent < 0:
+                        continue
+
+                    total_bytes += bytes_sent
+
+            return total_bytes
         except Exception as e:
             logger.error(f'Error: {e}')
             return -1
@@ -283,7 +286,7 @@ class Connection:
     def find_socket(self, filename: str) -> list[tuple[socket, socket]] | None:
         try:
             return [(key[0], key[1]) for key, values in self.storage.items() for value in values if
-                    value.filename == filename]
+                    value.current_filename == filename]
         except Exception as e:
             logger.error(e)
             return None
@@ -296,7 +299,7 @@ class Connection:
 
             for values in self.storage.values():
                 for value in values:
-                    filename_counts[value.filename] += 1
+                    filename_counts[value.current_filename] += 1
 
             for filename, count in filename_counts.items():
                 if count == 1:
@@ -315,33 +318,33 @@ class Connection:
         try:
             for pair, file_infos in self.storage.items():
                 for file_info in file_infos:
-                    if file_info.filename == filename:
+                    if file_info.current_filename == filename:
                         return file_info.size
             return -1
         except Exception as e:
             logger.error(e)
             return -1
 
-    async def index_files(self) -> None:
+    def index_files(self) -> None:
         filename_hash_map = defaultdict(set)
 
         for item in self.storage.values():
             for file_infos in item:
                 if file_infos.is_filename_modify:
-                    item.filename = self.remove_index(item.filename)
+                    file_infos.current_filename = self.remove_index(file_infos.current_filename)
+                    file_infos.is_filename_modify = False
 
         storage_items = [file_info for files in self.storage.values() for file_info in files]
 
         for i, first in enumerate(storage_items):
             for second in storage_items[i + 1:]:
-                if first.hash == second.hash and first.filename != second.filename:
-                    second.filename = first.filename
-                    first.is_filename_changed = True
+                if first.hash == second.hash and first.current_filename != second.current_filename:
+                    second.current_filename = first.current_filename
                     second.is_filename_changed = True
 
         for files in self.storage.values():
             for file_info in files:
-                filename_hash_map[file_info.filename].add(file_info.hash)
+                filename_hash_map[file_info.current_filename].add(file_info.hash)
 
         for filename, hashes in filename_hash_map.items():
             file_hash_size = len(hashes)
@@ -350,8 +353,8 @@ class Connection:
                 for hash_value in hashes:
                     for files in self.storage.values():
                         for file_info in files:
-                            if file_info.filename == filename and file_info.hash == hash_value:
-                                file_info.filename += f'({file_hash_size})'
+                            if file_info.current_filename == filename and file_info.hash == hash_value:
+                                file_info.current_filename += f'({file_hash_size})'
                                 file_info.is_filename_modify = True
                     file_hash_size -= 1
 
@@ -369,11 +372,11 @@ class Connection:
             for key, values in self.storage.items():
                 if key == pair:
                     keys_to_remove.append(key)
-                    filename = self.remove_index(values[0].filename)
+                    filename = self.remove_index(values[0].current_filename)
 
                     for entry_value in self.storage[key]:
-                        if entry_value.filename.startswith(filename):
-                            entry_value.filename = self.remove_index(entry_value.filename)
+                        if entry_value.current_filename.startswith(filename):
+                            entry_value.current_filename = self.remove_index(entry_value.current_filename)
 
             for key in keys_to_remove:
                 del self.storage[key]
@@ -397,7 +400,7 @@ class Connection:
         try:
             for values in self.storage.values():
                 for value in values:
-                    if value.filename == filename:
+                    if value.current_filename == filename:
                         return value.is_filename_modify
             return False
         except Exception as e:
@@ -409,7 +412,7 @@ class Connection:
             for key, values in self.storage.items():
                 if key[0] == sock or key[1] == sock:
                     for value in values:
-                        if value.filename == filename:
+                        if value.current_filename == filename:
                             return value.is_filename_changed
             return False
         except Exception as e:
@@ -429,9 +432,17 @@ class Connection:
 
     def is_file_exist_on_client(self, sock: socket, filename: str) -> bool:
         for (sock1, sock2), files in self.storage.items():
-            if any(file_info.filename == filename and (sock1 == sock or sock2 == sock) for file_info in files):
+            if any(file_info.current_filename == filename and (sock1 == sock or sock2 == sock) for file_info in files):
                 return True
         return False
+
+    async def get_old_filename(self, sock: socket, filename: str) -> str:
+        for (sock1, sock2), files in self.storage.items():
+            if sock1.fileno() is sock.fileno() or sock2.fileno() is sock.fileno():
+                for file_info in files:
+                    if file_info.current_filename == filename:
+                        return file_info.old_filename
+        return filename
 
 
 async def main():
