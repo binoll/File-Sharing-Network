@@ -6,4 +6,5 @@ set(CMAKE_C_STANDARD 23)
 add_executable(
         switch
         switch.c
+        config.c
 )

@@ -1,29 +1,4 @@
-#include <pcap.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <netinet/ether.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <arpa/inet.h>
-
-#define BUFFER_SIZE 256
-#define TABLE_SIZE 256
-#define TIMEOUT 60
-
-struct mac_entry {
-	u_char mac[ETHER_ADDR_LEN];
-	char interface[BUFFER_SIZE];
-	time_t timestamp;
-};
-
-struct mac_entry mac_table[TABLE_SIZE];
-
-struct handler_args {
-	char interface1[BUFFER_SIZE];
-	char interface2[BUFFER_SIZE];
-};
+#include "switch.h"
 
 void update_mac_table(const u_char* mac, const char* interface) {
 	time_t current_time = time(NULL);
@@ -78,20 +53,20 @@ struct tcphdr* check_tcp_segment(const u_char* packet) {
 	return NULL;
 }
 
-void modify_tcp_segment(struct tcphdr* tcp_header) {
-	if (tcp_header != NULL) {
+void modify_tcp_segment(struct tcphdr* tcp_header, const struct config* cfg) {
+	if (tcp_header != NULL && cfg->modify_flag) {
 		tcp_header->urg = 1;
-		tcp_header->urg_ptr = htons(33333);
+		tcp_header->urg_ptr = htons(cfg->urg_ptr_value);
 	}
 }
 
 void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char* packet) {
 	struct handler_args* args = (struct handler_args*) user;
-	char* interface = args->interface1;
+	struct config* cfg = &args->cfg;
+	char* interface = args->interface1;  // This assumes packet_handler is called for interface1 first
 	struct ether_header* eth_header = (struct ether_header*) packet;
 	const char* out_interface = lookup_mac_table(eth_header->ether_dhost);
 	pcap_t* handle = NULL;
-	struct tcphdr* tcp_header = check_tcp_segment(packet);
 
 	update_mac_table(eth_header->ether_shost, interface);
 
@@ -103,7 +78,6 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
 		} else {
 			out_interface = args->interface1;
 		}
-
 		handle = pcap_open_live(out_interface, BUFSIZ, 1, 1000, NULL);
 	}
 
@@ -112,8 +86,9 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
 		return;
 	}
 
+	struct tcphdr* tcp_header = check_tcp_segment(packet);
 	if (tcp_header != NULL) {
-		modify_tcp_segment(tcp_header);
+		modify_tcp_segment(tcp_header, cfg);
 	}
 
 	if (pcap_sendpacket(handle, packet, (int) header->len) != 0) {
@@ -127,15 +102,19 @@ int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	pcap_t* handle1 = NULL;
 	pcap_t* handle2 = NULL;
-	struct handler_args args;
 
-	if (argc != 3) {
-		fprintf(stdout, "Usage: %s (interface1) (interface2)\n", argv[0]);
+	if (argc != 4) {
+		fprintf(stdout, "Usage: %s (interface1) (interface2) (init.cfg)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
+	struct handler_args args;
 	strcpy(args.interface1, argv[1]);
 	strcpy(args.interface2, argv[2]);
+
+	struct config cfg;
+	read_config("init.cfg", &cfg);
+	args.cfg = cfg;
 
 	handle1 = pcap_open_live(args.interface1, BUFSIZ, 1, 1000, buffer);
 	if (handle1 == NULL) {
@@ -166,5 +145,5 @@ int main(int argc, char* argv[]) {
 
 	pcap_close(handle1);
 	pcap_close(handle2);
-	return EXIT_SUCCESS;
+	return 0;
 }
