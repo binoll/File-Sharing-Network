@@ -31,4 +31,4 @@ struct handler_args {
 	struct config cfg;
 };
 
-extern void read_config(const char*, struct config*);
+extern int read_config(const char*, struct config*);

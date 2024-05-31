@@ -1,10 +1,10 @@
 #include "switch.h"
 
-void read_config(const char* filename, struct config* cfg) {
+int read_config(const char* filename, struct config* cfg) {
 	FILE* file = fopen(filename, "r");
 	if (file == NULL) {
 		fprintf(stderr, "Could not open config file %s\n", filename);
-		exit(EXIT_FAILURE);
+		return EXIT_FAILURE;
 	}
 
 	char line[BUFFER_SIZE];
@@ -19,4 +19,5 @@ void read_config(const char* filename, struct config* cfg) {
 	}
 
 	fclose(file);
+	return EXIT_SUCCESS;
 }

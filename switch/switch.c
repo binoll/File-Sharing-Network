@@ -104,18 +104,21 @@ int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	pcap_t* handle1 = NULL;
 	pcap_t* handle2 = NULL;
+	struct config cfg;
+	struct handler_args args;
 
-	if (argc != 4) {
-		fprintf(stdout, "Usage: %s (interface1) (interface2) (init.cfg)\n", argv[0]);
+	if (argc != 3) {
+		fprintf(stdout, "Usage: %s (interface1) (interface2)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	struct handler_args args;
 	strcpy(args.interface1, argv[1]);
 	strcpy(args.interface2, argv[2]);
 
-	struct config cfg;
-	read_config("init.cfg", &cfg);
+	if (read_config("init.cfg", &cfg) == EXIT_FAILURE) {
+		return EXIT_FAILURE;
+	}
+
 	args.cfg = cfg;
 
 	handle1 = pcap_open_live(args.interface1, BUFSIZ, 1, 1000, buffer);
