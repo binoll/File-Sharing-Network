@@ -5,8 +5,61 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <arpa/inet.h>
 
 #define BUFFER_SIZE 256
+#define TABLE_SIZE 256
+#define TIMEOUT 60
+
+struct mac_entry {
+	u_char mac[ETHER_ADDR_LEN];
+	char interface[BUFFER_SIZE];
+	time_t timestamp;
+};
+
+struct mac_entry mac_table[TABLE_SIZE];
+
+struct handler_args {
+	char interface1[BUFFER_SIZE];
+	char interface2[BUFFER_SIZE];
+};
+
+void update_mac_table(const u_char* mac, const char* interface) {
+	time_t current_time = time(NULL);
+
+	for (int i = 0; i < TABLE_SIZE; ++i) {
+		if (memcmp(mac_table[i].mac, mac, ETHER_ADDR_LEN) == 0) {
+			mac_table[i].timestamp = current_time;
+			strcpy(mac_table[i].interface, interface);
+			return;
+		}
+	}
+
+	for (int i = 0; i < TABLE_SIZE; ++i) {
+		if (mac_table[i].timestamp == 0 || current_time - mac_table[i].timestamp > TIMEOUT) {
+			memcpy(mac_table[i].mac, mac, ETHER_ADDR_LEN);
+			mac_table[i].timestamp = current_time;
+			strcpy(mac_table[i].interface, interface);
+			return;
+		}
+	}
+}
+
+const char* lookup_mac_table(const u_char* mac) {
+	time_t current_time = time(NULL);
+
+	for (int i = 0; i < TABLE_SIZE; ++i) {
+		if (memcmp(mac_table[i].mac, mac, ETHER_ADDR_LEN) == 0) {
+			if (current_time - mac_table[i].timestamp <= TIMEOUT) {
+				return mac_table[i].interface;
+			} else {
+				mac_table[i].timestamp = 0;
+			}
+		}
+	}
+	return NULL;
+}
 
 struct tcphdr* check_tcp_segment(const u_char* packet) {
 	const struct ether_header* eth_header = (struct ether_header*) packet;
@@ -30,69 +83,85 @@ void modify_tcp_segment(struct tcphdr* tcp_header) {
 	}
 }
 
+void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char* packet) {
+	struct handler_args* args = (struct handler_args*) user;
+	char* interface = args->interface1;  // This assumes packet_handler is called for interface1 first
+	struct ether_header* eth_header = (struct ether_header*) packet;
+	const char* out_interface = lookup_mac_table(eth_header->ether_dhost);
+	pcap_t* handle = NULL;
 
-void tcp_segment_before(struct tcphdr* tcp_header, const char* interface) {
-	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" before modify \"%hu\" on interface %s\n", ntohs(tcp_header->urg_ptr),
-		        interface);
-	}
-}
+	update_mac_table(eth_header->ether_shost, interface);
 
-void tcp_segment_after(struct tcphdr* tcp_header, const char* interface) {
-	if (tcp_header != NULL) {
-		fprintf(stdout, "TCP segment flag \"URG\" after modify \"%hu\" on interface %s\n", ntohs(tcp_header->urg_ptr),
-		        interface);
+	if (out_interface != NULL && strcmp(out_interface, interface) != 0) {
+		handle = pcap_open_live(out_interface, BUFSIZ, 1, 1000, NULL);
+	} else {
+		if (strcmp(interface, args->interface1) == 0) {
+			out_interface = args->interface2;
+		} else {
+			out_interface = args->interface1;
+		}
+		handle = pcap_open_live(out_interface, BUFSIZ, 1, 1000, NULL);
 	}
+
+	if (handle == NULL) {
+		fprintf(stderr, "Could not open device %s: %s\n", out_interface, pcap_geterr(handle));
+		return;
+	}
+
+	struct tcphdr* tcp_header = check_tcp_segment(packet);
+	if (tcp_header != NULL) {
+		modify_tcp_segment(tcp_header);
+	}
+
+	if (pcap_sendpacket(handle, packet, (int) header->len) != 0) {
+		fprintf(stderr, "Error sending packet: %s\n", pcap_geterr(handle));
+	}
+
+	pcap_close(handle);
 }
 
 int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
-	char interface[BUFFER_SIZE];
-	pcap_t* handle_before = NULL;
-	const u_char* packet = NULL;
-	struct pcap_pkthdr header;
+	pcap_t* handle1 = NULL;
+	pcap_t* handle2 = NULL;
 
-	if (argc != 2) {
-		fprintf(stdout, "Usage: %s (interface)\n", argv[0]);
+	if (argc != 3) {
+		fprintf(stdout, "Usage: %s (interface1) (interface2)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
-	strcpy(interface, argv[1]);
+	struct handler_args args;
+	strcpy(args.interface1, argv[1]);
+	strcpy(args.interface2, argv[2]);
 
-	handle_before = pcap_open_live(interface, BUFSIZ, 1, 1000, buffer);
-	if (handle_before == NULL) {
-		fprintf(stdout, "\nCould not open device: %s", interface);
-		return -1;
+	handle1 = pcap_open_live(args.interface1, BUFSIZ, 1, 1000, buffer);
+	if (handle1 == NULL) {
+		fprintf(stderr, "Could not open device: %s\n", args.interface1);
+		return EXIT_FAILURE;
 	}
 
-	for (unsigned long long i = 0;; ++i) {
-		packet = pcap_next(handle_before, &header);
-		if (packet == NULL) {
-			continue;
-		}
-
-		struct tcphdr* tcp_header = check_tcp_segment(packet);
-		if (tcp_header == NULL) {
-			continue;
-		}
-
-		fprintf(stdout, "\n+-----------------Start of TCP segment %llu-----------------+\n", i);
-		tcp_segment_before(tcp_header, interface);
-		modify_tcp_segment(tcp_header);
-
-		if (pcap_sendpacket(handle_before, packet, header.len) != 0) {
-			fprintf(stdout, "Error sending packet: %s\n", pcap_geterr(handle_before));
-			pcap_close(handle_before);
-			return -1;
-		}
-
-		packet = pcap_next(handle_before, &header);
-		if (packet != NULL) {
-			struct tcphdr* modified_tcp_header = check_tcp_segment(packet);
-			tcp_segment_after(modified_tcp_header, interface);
-		}
-		fprintf(stdout, "+------------------End of TCP segment %llu------------------+\n", i);
+	handle2 = pcap_open_live(args.interface2, BUFSIZ, 1, 1000, buffer);
+	if (handle2 == NULL) {
+		fprintf(stderr, "Could not open device: %s\n", args.interface2);
+		pcap_close(handle1);
+		return EXIT_FAILURE;
 	}
-	pcap_close(handle_before);
+
+	if (pcap_loop(handle1, 0, packet_handler, (u_char*) &args) < 0) {
+		fprintf(stderr, "Error occurred while processing packets on %s: %s\n", args.interface1, pcap_geterr(handle1));
+		pcap_close(handle1);
+		pcap_close(handle2);
+		return EXIT_FAILURE;
+	}
+
+	if (pcap_loop(handle2, 0, packet_handler, (u_char*) &args) < 0) {
+		fprintf(stderr, "Error occurred while processing packets on %s: %s\n", args.interface2, pcap_geterr(handle2));
+		pcap_close(handle1);
+		pcap_close(handle2);
+		return EXIT_FAILURE;
+	}
+
+	pcap_close(handle1);
+	pcap_close(handle2);
 	return 0;
 }
