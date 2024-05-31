@@ -13,6 +13,7 @@
 #define BUFFER_SIZE 256
 #define TABLE_SIZE 256
 #define TIMEOUT 60
+#define CONFIG_FILE "init.cfg"
 
 struct mac_entry {
 	u_char mac[ETHER_ADDR_LEN];

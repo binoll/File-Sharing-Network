@@ -65,7 +65,7 @@ void modify_tcp_segment(struct tcphdr* tcp_header, const struct config* cfg) {
 void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char* packet) {
 	struct handler_args* args = (struct handler_args*) user;
 	struct config* cfg = &args->cfg;
-	char* interface = args->interface1;  // This assumes packet_handler is called for interface1 first
+	char* interface = args->interface1;
 	struct ether_header* eth_header = (struct ether_header*) packet;
 	const char* out_interface = lookup_mac_table(eth_header->ether_dhost);
 	pcap_t* handle = NULL;
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
 	strcpy(args.interface1, argv[1]);
 	strcpy(args.interface2, argv[2]);
 
-	if (read_config("init.cfg", &cfg) == EXIT_FAILURE) {
+	if (read_config(CONFIG_FILE, &cfg) == EXIT_FAILURE) {
 		return EXIT_FAILURE;
 	}
 
