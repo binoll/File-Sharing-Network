@@ -249,13 +249,16 @@ class Connection:
                 return -1
 
             total_bytes = 0
+
             for i, (_, client_socket_communicate) in enumerate(sockets):
-                for offset in range(0, message_size, BUFFER_SIZE):
+                offset = 0
+                while offset < message_size:
                     client_socket_communicate = sockets[i % len(sockets)][1]
                     chunk_size = min(message_size - offset, BUFFER_SIZE)
 
                     if not self.check_connection(client_socket_communicate):
                         sockets.remove((_, client_socket_communicate))
+                        continue
 
                     filename = await self.get_old_filename(client_socket_communicate, filename)
 
@@ -277,8 +280,9 @@ class Connection:
                         continue
 
                     total_bytes += bytes_sent
+                    offset += chunk_size
 
-            return total_bytes
+                return total_bytes
         except Exception as e:
             logger.error(f'Error: {e}')
             return -1
