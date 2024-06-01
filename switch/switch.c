@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
 	struct handler_args args;
 
 	if (argc != 4) {
-		fprintf(stdout, "Usage: %s (interface1) (interface2) (path_to_init.cfg)\n", argv[0]);
+		fprintf(stdout, "Usage: %s (interface1) (interface2) (init.cfg)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
