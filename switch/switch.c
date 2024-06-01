@@ -102,20 +102,22 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
 
 int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
+	char path_config[BUFFER_SIZE];
 	pcap_t* handle1 = NULL;
 	pcap_t* handle2 = NULL;
 	struct config cfg;
 	struct handler_args args;
 
-	if (argc != 3) {
-		fprintf(stdout, "Usage: %s (interface1) (interface2)\n", argv[0]);
+	if (argc != 4) {
+		fprintf(stdout, "Usage: %s (interface1) (interface2) (path_to_init.cfg)\n", argv[0]);
 		return EXIT_FAILURE;
 	}
 
 	strcpy(args.interface1, argv[1]);
 	strcpy(args.interface2, argv[2]);
+	strcpy(path_config, argv[3]);
 
-	if (read_config(CONFIG_FILE, &cfg) == EXIT_FAILURE) {
+	if (read_config(path_config, &cfg) == EXIT_FAILURE) {
 		return EXIT_FAILURE;
 	}
 
