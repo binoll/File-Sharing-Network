@@ -152,5 +152,6 @@ int main(int argc, char* argv[]) {
 
 	pcap_close(handle1);
 	pcap_close(handle2);
+
 	return 0;
 }
