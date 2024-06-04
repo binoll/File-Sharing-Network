@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include "switch.h"
 
 struct mac_entry mac_table[TABLE_SIZE];
@@ -80,6 +81,7 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
 		} else {
 			out_interface = args->interface1;
 		}
+		
 		handle = pcap_open_live(out_interface, BUFSIZ, 1, 1000, NULL);
 	}
 
@@ -100,6 +102,18 @@ void packet_handler(u_char* user, const struct pcap_pkthdr* header, const u_char
 	pcap_close(handle);
 }
 
+void* pcap_loop_thread(void* arg) {
+	pcap_t* handle = (pcap_t*) arg;
+
+	if (pcap_loop(handle, 0, packet_handler, (u_char*) &arg) < 0) {
+		fprintf(stderr, "Error occurred while processing packets: %s\n", pcap_geterr(handle));
+	}
+
+	pcap_close(handle);
+
+	return NULL;
+}
+
 int main(int argc, char* argv[]) {
 	char buffer[PCAP_ERRBUF_SIZE];
 	char path_config[BUFFER_SIZE];
@@ -107,6 +121,7 @@ int main(int argc, char* argv[]) {
 	pcap_t* handle2 = NULL;
 	struct config cfg;
 	struct handler_args args;
+	pthread_t thread1, thread2;
 
 	if (argc != 4) {
 		fprintf(stdout, "Usage: %s (interface1) (interface2) (init.cfg)\n", argv[0]);
@@ -136,22 +151,22 @@ int main(int argc, char* argv[]) {
 		return EXIT_FAILURE;
 	}
 
-	if (pcap_loop(handle1, 0, packet_handler, (u_char*) &args) < 0) {
-		fprintf(stderr, "Error occurred while processing packets on %s: %s\n", args.interface1, pcap_geterr(handle1));
+	if (pthread_create(&thread1, NULL, pcap_loop_thread, (void*) handle1) != 0) {
+		fprintf(stderr, "Error creating thread for interface %s\n", args.interface1);
 		pcap_close(handle1);
 		pcap_close(handle2);
 		return EXIT_FAILURE;
 	}
 
-	if (pcap_loop(handle2, 0, packet_handler, (u_char*) &args) < 0) {
-		fprintf(stderr, "Error occurred while processing packets on %s: %s\n", args.interface2, pcap_geterr(handle2));
+	if (pthread_create(&thread2, NULL, pcap_loop_thread, (void*) handle2) != 0) {
+		fprintf(stderr, "Error creating thread for interface %s\n", args.interface2);
 		pcap_close(handle1);
 		pcap_close(handle2);
 		return EXIT_FAILURE;
 	}
 
-	pcap_close(handle1);
-	pcap_close(handle2);
+	pthread_join(thread1, NULL);
+	pthread_join(thread2, NULL);
 
 	return 0;
 }
