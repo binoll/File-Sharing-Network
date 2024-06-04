@@ -434,7 +434,7 @@ void Connection::indexFiles() {
 	std::lock_guard<std::mutex> lock(mutex);
 
 	for (auto& pair : storage) {
-		if (pair.second.is_filename_modify) {
+		if (pair.second.is_filename_indexed) {
 			pair.second.current_filename = removeIndex(pair.second.current_filename);
 		}
 	}
@@ -463,7 +463,7 @@ void Connection::indexFiles() {
 				for (auto& second : storage) {
 					if (filename == second.second.current_filename && first == second.second.hash) {
 						second.second.current_filename += '(' + std::to_string(file_hash_size) + ')';
-						second.second.is_filename_modify = true;
+						second.second.is_filename_indexed = true;
 					}
 				}
 
@@ -522,7 +522,7 @@ bool Connection::isFilenameModify(int32_t socket, const std::string& filename) {
 	for (auto& entry : storage) {
 		if (entry.second.current_filename == filename &&
 				(entry.first.first == socket || entry.first.second == socket)) {
-			return entry.second.is_filename_modify;
+			return entry.second.is_filename_indexed;
 		}
 	}
 
@@ -534,7 +534,7 @@ std::string Connection::getOldFilename(int32_t socket, const std::string& filena
 
 	for (auto& pair : storage) {
 		if ((pair.first.first == socket || pair.first.second == socket) && pair.second.is_filename_changed) {
-			return pair.second.old_filename;
+			return pair.second.filename;
 		}
 	}
 

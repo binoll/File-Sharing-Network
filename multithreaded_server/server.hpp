@@ -9,7 +9,7 @@ struct FileInfo {
 	int64_t size;
 	std::string hash;
 	std::string current_filename;
-	std::string old_filename;
+	std::string filename;
 	bool is_filename_changed;
-	bool is_filename_modify;
+	bool is_filename_indexed;
 };
